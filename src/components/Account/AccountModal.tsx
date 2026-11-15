@@ -21,8 +21,9 @@ import {
   ShieldCheck, 
   Key, 
   Check, 
+  Settings,
   AlertTriangle,
-  Settings
+  RotateCcw
 } from 'lucide-react';
 
 interface AccountModalProps {
@@ -32,6 +33,7 @@ interface AccountModalProps {
   onUpdateProfile: (updated: UserProfile) => void;
   onLogout: () => void;
   onShowFirebaseConfig: () => void;
+  onResetAccount?: () => void;
 }
 
 export const AccountModal: React.FC<AccountModalProps> = ({
@@ -40,7 +42,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   profile,
   onUpdateProfile,
   onLogout,
-  onShowFirebaseConfig
+  onShowFirebaseConfig,
+  onResetAccount
 }) => {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced'>('idle');
   const [lastSyncTime, setLastSyncTime] = useState<string>('À l instant');
@@ -278,9 +281,34 @@ export const AccountModal: React.FC<AccountModalProps> = ({
               Tester le son
             </button>
           </div>
+
+          {/* 6. Remise à zéro du compte */}
+          {onResetAccount && (
+            <div className="p-3.5 bg-rose-950/20 border border-rose-900/50 rounded-xl space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <div>
+                  <span className="font-semibold text-rose-200 text-xs block">Remise à zéro du compte</span>
+                  <span className="text-[10px] text-rose-300/70">Efface toutes les données pour repartir sur un compte neuf sans aucune statistique préenregistrée.</span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (window.confirm('Êtes-vous sûr de vouloir remettre votre compte à zéro ? Toutes les données, tests, plan d entraînement et historique seront effacés pour repartir sur un compte totalement neuf.')) {
+                    onResetAccount();
+                    onClose();
+                  }
+                }}
+                className="w-full py-2 bg-rose-900/40 hover:bg-rose-900/70 border border-rose-800 text-rose-200 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-2"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Remettre le compte à zéro (Base saine)</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* 6. Disconnect Button */}
+        {/* 7. Disconnect Button */}
         <div className="pt-3 border-t border-zinc-800">
           <button
             onClick={() => {

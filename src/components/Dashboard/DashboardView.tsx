@@ -22,7 +22,9 @@ import {
   Lock,
   Unlock,
   AlertTriangle,
-  Play
+  Play,
+  Bot,
+  RotateCcw
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -102,6 +104,7 @@ interface DashboardViewProps {
   onOpenGymConfig?: () => void;
   onReconfigureProfile?: () => void;
   onOpenAgenticAssessment: () => void;
+  onResetAccount?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -115,7 +118,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenGuidedTest,
   onOpenGymConfig,
   onReconfigureProfile,
-  onOpenAgenticAssessment
+  onOpenAgenticAssessment,
+  onResetAccount
 }) => {
   const [notificationGranted, setNotificationGranted] = useState<boolean>(false);
   const [isDetailedNutritionOpen, setIsDetailedNutritionOpen] = useState<boolean>(() => {
@@ -204,8 +208,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Top Welcome & Notification Reminder Banner */}
       <div className="flex items-center justify-between">
         <div>
-          <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-semibold">
-            {(profile?.primaryGoal || 'recomposition').toUpperCase()}
+          <span className={`text-[10px] font-mono uppercase tracking-wider font-semibold ${
+            profile?.primaryGoal ? 'text-emerald-400' : 'text-amber-400'
+          }`}>
+            {profile?.primaryGoal ? profile.primaryGoal.toUpperCase() : 'EN ATTENTE DE CADRAGE'}
           </span>
           <h1 className="text-xl font-bold text-zinc-100">
             Bonjour, {profile?.name || 'Athlète'}
@@ -234,6 +240,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         profile={profile}
         onOpenTest={onOpenGuidedTest}
         onOpenGymConfig={onOpenGymConfig}
+        onOpenAgenticAssessment={onOpenAgenticAssessment}
       />
 
       {/* Checklist Banner / Daily Reminder */}
@@ -328,6 +335,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
             )}
           </div>
+        ) : schedule.length === 0 ? (
+          <div>
+            <h2 className="text-base font-bold text-zinc-200 mb-1">
+              Plan d'entraînement en attente de cadrage
+            </h2>
+            <p className="text-xs text-zinc-400 mb-3 leading-relaxed">
+              Votre programmation personnalisée et vos séances d'entraînement seront générées dès la validation de votre premier bilan initial avec le Coach.
+            </p>
+            <button
+              onClick={onOpenAgenticAssessment}
+              className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
+            >
+              <Bot className="w-4 h-4" />
+              <span>Lancer le premier bilan</span>
+            </button>
+          </div>
         ) : (
           <div>
             <h2 className="text-base font-bold text-zinc-200 mb-1">
@@ -365,74 +388,83 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <h3 className="text-sm font-semibold text-zinc-100">Planning de la Semaine</h3>
           </div>
           <span className="text-xs text-zinc-500 font-mono">
-            {profile.weeklyAvailabilityDays} séances / 7j
+            {profile.weeklyAvailabilityDays ? `${profile.weeklyAvailabilityDays} séances / 7j` : 'Non calibré'}
           </span>
         </div>
 
-        <div className="space-y-1.5">
-          {schedule.map((day) => {
-            const isToday = day.dayOfWeek === todayDayOfWeek;
-            const reqTest = day.session ? getRequiredTestForSession(day.session) : null;
-            const isCalibrated = reqTest
-              ? (profile.baselineTests || []).some((t) => t.id === reqTest && t.value !== undefined)
-              : true;
+        {schedule.length === 0 ? (
+          <div className="p-4 bg-zinc-950/60 rounded-xl border border-zinc-800/60 text-center">
+            <p className="text-xs text-zinc-400 font-medium">Aucune séance programmée pour l'instant</p>
+            <p className="text-[11px] text-zinc-500 mt-1">
+              Votre cycle hebdomadaire sera structuré sur-mesure dès la validation de votre premier bilan initial.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {schedule.map((day) => {
+              const isToday = day.dayOfWeek === todayDayOfWeek;
+              const reqTest = day.session ? getRequiredTestForSession(day.session) : null;
+              const isCalibrated = reqTest
+                ? (profile.baselineTests || []).some((t) => t.id === reqTest && t.value !== undefined)
+                : true;
 
-            return (
-              <div
-                key={day.dayOfWeek}
-                className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition ${
-                  isToday
-                    ? 'bg-zinc-900 border-emerald-500/80'
-                    : 'bg-zinc-950/60 border-zinc-800/60'
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span
-                    className={`font-mono font-bold w-12 shrink-0 ${
-                      isToday ? 'text-emerald-400' : 'text-zinc-500'
-                    }`}
-                  >
-                    {day.dayName}
-                  </span>
-                  <div className="flex items-center gap-1.5 min-w-0">
+              return (
+                <div
+                  key={day.dayOfWeek}
+                  className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition ${
+                    isToday
+                      ? 'bg-zinc-900 border-emerald-500/80'
+                      : 'bg-zinc-950/60 border-zinc-800/60'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
                     <span
-                      className={`truncate ${
-                        day.isRestDay ? 'text-zinc-500 italic' : 'text-zinc-200 font-medium'
+                      className={`font-mono font-bold w-12 shrink-0 ${
+                        isToday ? 'text-emerald-400' : 'text-zinc-500'
                       }`}
                     >
-                      {day.session ? day.session.title : 'Récupération active'}
+                      {day.dayName}
                     </span>
-                    {day.session && !isCalibrated && (
-                      <span className="shrink-0 p-0.5 rounded text-amber-400" title="Test de calibration recommandé">
-                        <Lock className="w-3 h-3 inline" />
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {day.session && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {!isCalibrated && reqTest && (
-                      <button
-                        onClick={() => onOpenGuidedTest(reqTest)}
-                        className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/50 hover:bg-amber-900/60 transition"
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span
+                        className={`truncate ${
+                          day.isRestDay ? 'text-zinc-500 italic' : 'text-zinc-200 font-medium'
+                        }`}
                       >
-                        Tester
-                      </button>
-                    )}
-                    <button
-                      onClick={() => onStartSession(day.session!)}
-                      className="p-1 rounded-lg text-zinc-400 hover:text-emerald-400"
-                      title="Lancer la séance"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
+                        {day.session ? day.session.title : 'Récupération active'}
+                      </span>
+                      {day.session && !isCalibrated && (
+                        <span className="shrink-0 p-0.5 rounded text-amber-400" title="Test de calibration recommandé">
+                          <Lock className="w-3 h-3 inline" />
+                        </span>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+
+                  {day.session && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {!isCalibrated && reqTest && (
+                        <button
+                          onClick={() => onOpenGuidedTest(reqTest)}
+                          className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/50 hover:bg-amber-900/60 transition"
+                        >
+                          Tester
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onStartSession(day.session!)}
+                        className="p-1 rounded-lg text-zinc-400 hover:text-emerald-400"
+                        title="Lancer la séance"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* PROGRESSION CHARTS */}
@@ -445,7 +477,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Évolution du Poids (kg)
             </span>
             <span className="text-xs font-mono font-bold text-zinc-100">
-              {dailyHabits.weightKg || profile.weightKg} kg
+              {dailyHabits.weightKg || profile.weightKg ? `${dailyHabits.weightKg || profile.weightKg} kg` : '-- kg'}
             </span>
           </div>
 
@@ -471,7 +503,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           ) : (
             <div className="h-40 w-full flex flex-col items-center justify-center text-center p-4 bg-zinc-950/60 rounded-xl border border-zinc-800/60">
               <TrendingUp className="w-5 h-5 text-zinc-600 mb-2" />
-              <p className="text-xs text-zinc-300 font-medium">Poids initial : {profile.weightKg} kg</p>
+              <p className="text-xs text-zinc-300 font-medium">
+                Poids initial : {dailyHabits.weightKg || profile.weightKg ? `${dailyHabits.weightKg || profile.weightKg} kg` : 'Non renseigné'}
+              </p>
               <p className="text-[11px] text-zinc-500 mt-1 max-w-xs">
                 Renseignez vos pesées dans le bloc Habitudes pour tracer votre courbe réelle dans le temps.
               </p>
@@ -516,19 +550,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Reconfigure Profile Quick Access */}
-      {onReconfigureProfile && (
-        <div className="p-4 bg-zinc-900/30 border border-zinc-800/80 rounded-2xl flex items-center justify-between">
+      {/* Reconfigure Profile & Account Reset Quick Access */}
+      {(onReconfigureProfile || onResetAccount) && (
+        <div className="p-4 bg-zinc-900/30 border border-zinc-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h4 className="text-xs font-semibold text-zinc-200">Reconfigurer mon profil & objectifs</h4>
-            <p className="text-[11px] text-zinc-500">Repasser le questionnaire initial complet (âge, poids réel, matériel, fréquence)</p>
+            <h4 className="text-xs font-semibold text-zinc-200">Gestion & Réinitialisation</h4>
+            <p className="text-[11px] text-zinc-500">Repasser le cadrage initial ou remettre le compte à neuf</p>
           </div>
-          <button
-            onClick={onReconfigureProfile}
-            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl transition"
-          >
-            Reconfigurer
-          </button>
+          <div className="flex items-center gap-2">
+            {onReconfigureProfile && (
+              <button
+                onClick={onReconfigureProfile}
+                className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl transition"
+              >
+                Reconfigurer
+              </button>
+            )}
+            {onResetAccount && (
+              <button
+                onClick={() => {
+                  if (window.confirm('Voulez-vous remettre votre compte à zéro ? Toutes les données, tests, plan et historique seront effacés pour repartir sur un compte totalement neuf.')) {
+                    onResetAccount();
+                  }
+                }}
+                className="px-3 py-1.5 bg-zinc-900 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-900 text-zinc-400 hover:text-rose-400 text-xs font-semibold rounded-xl transition flex items-center gap-1.5"
+                title="Remettre le compte à zéro"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Remise à 0</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 

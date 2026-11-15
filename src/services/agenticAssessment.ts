@@ -307,21 +307,25 @@ async function generateDeepSportsScientistDossier(
   if (lower.includes('coude')) injuries.push('Coudes (tendinopathie)');
 
   // 7. Physical Stats
-  let age = previousDossier?.baselineTrackingMetrics.initialAge || currentProfile.age || 28;
+  let age = previousDossier?.baselineTrackingMetrics.initialAge || currentProfile.age;
   const ageMatch = lower.match(/(?:j'ai|age|âgé de|age de)?\s*(\d{2})\s*(?:ans|an)\b/i) || lower.match(/\b(\d{2})\s*ans\b/i);
   if (ageMatch) age = parseInt(ageMatch[1]);
 
-  let weight = previousDossier?.baselineTrackingMetrics.initialWeightKg || currentProfile.weightKg || 75;
+  let weight = previousDossier?.baselineTrackingMetrics.initialWeightKg || currentProfile.weightKg;
   const weightMatch = lower.match(/(?:pèse|poids|fais)?\s*(\d{2,3}(?:[.,]\d)?)\s*(?:kg|kilos|kilo)\b/i);
   if (weightMatch) weight = parseFloat(weightMatch[1].replace(',', '.'));
 
-  let height = previousDossier?.baselineTrackingMetrics.initialHeightCm || currentProfile.heightCm || 178;
+  let height = previousDossier?.baselineTrackingMetrics.initialHeightCm || currentProfile.heightCm;
   const heightMetersMatch = lower.match(/\b(1)[m,.](\d{2})\b/i);
+  let heightCmMatch = false;
   if (heightMetersMatch) {
     height = 100 + parseInt(heightMetersMatch[2]);
   } else {
-    const heightCmMatch = lower.match(/\b(1[4-9]\d|2[0-1]\d)\s*(?:cm)?\b/);
-    if (heightCmMatch && lower.includes('cm')) height = parseInt(heightCmMatch[1]);
+    const cmMatch = lower.match(/\b(1[4-9]\d|2[0-1]\d)\s*(?:cm)?\b/);
+    if (cmMatch && lower.includes('cm')) {
+      height = parseInt(cmMatch[1]);
+      heightCmMatch = true;
+    }
   }
 
   // Dimension coverage flags
@@ -442,10 +446,13 @@ async function generateDeepSportsScientistDossier(
   const h = height;
   const a = age;
 
-  const bmr = Math.round(10 * w + 6.25 * h - 5 * a + 5);
+  const bmrWeight = w || 70;
+  const bmrHeight = h || 175;
+  const bmrAge = a || 28;
+  const bmr = Math.round(10 * bmrWeight + 6.25 * bmrHeight - 5 * bmrAge + 5);
   const tdee = Math.round(bmr * (daysPerWeek >= 4 ? 1.55 : 1.4));
   const calorieTarget = isHypertrophy ? tdee + 250 : isFatLoss ? tdee - 350 : tdee;
-  const proteinTarget = Math.round(w * (isFatLoss ? 2.2 : 2.0));
+  const proteinTarget = w ? Math.round(w * (isFatLoss ? 2.2 : 2.0)) : 140;
 
   let splitName = `${daysPerWeek} séances par semaine`;
   if (daysPerWeek === 3) splitName = 'Full Body Athlétique (3 jours / semaine)';
@@ -524,8 +531,12 @@ async function generateDeepSportsScientistDossier(
     howToObtain: 'S\'ajusteront automatiquement dès votre première séance enregistrée.'
   });
 
+  const conditionSummaryStats = (a || w || h)
+    ? `Athlète ${userName ? `(${userName}) ` : ''}${a ? `de ${a} ans ` : ''}${(w || h) ? `(${w ? `${w} kg` : ''}${w && h ? ', ' : ''}${h ? `${h} cm` : ''})` : ''}. `
+    : `Athlète ${userName ? `(${userName}) ` : ''}en phase de cadrage initial. `;
+
   const dossier: AgenticAthleticDossier = {
-    physicalConditionSummary: `Athlète ${userName ? `(${userName}) ` : ''}de ${a} ans (${w} kg, ${h} cm). ${isJobDesk ? 'Profil quotidien sédentaire avec nécessité d\'ouverture thoracique et de réactivation de hanche.' : isJobPhysical ? 'Profil actif avec dépense physique quotidienne soutenue.' : 'Condition de base propice à la progression.'} ${injuries.length > 0 ? `Points de vigilance articulaire : ${injuries.join(', ')}.` : 'Aucune restriction articulaire majeure.'}`,
+    physicalConditionSummary: `${conditionSummaryStats}${isJobDesk ? 'Profil quotidien sédentaire avec nécessité d\'ouverture thoracique et de réactivation de hanche.' : isJobPhysical ? 'Profil actif avec dépense physique quotidienne soutenue.' : 'Condition de base propice à la progression.'} ${injuries.length > 0 ? `Points de vigilance articulaire : ${injuries.join(', ')}.` : 'Aucune restriction articulaire majeure.'}`,
     recommendedTests,
     shortTermGoals: isHypertrophy 
       ? 'Acquisition d\'une technique irréprochable sur les 4 mouvements clés, progression de 10% sur les charges de travail et gain de 1 à 1.5 kg de masse dense en 6 semaines.'
@@ -543,7 +554,7 @@ async function generateDeepSportsScientistDossier(
     nutritionLifestyleDraft: {
       dailyCaloriesTarget: calorieTarget,
       proteinGramsTarget: proteinTarget,
-      waterLitersTarget: Math.round((w * 0.035 + 0.8) * 10) / 10,
+      waterLitersTarget: w ? Math.round((w * 0.035 + 0.8) * 10) / 10 : 2.5,
       nutritionStrategy: isHypertrophy 
         ? `Léger surplus anabolique (+250 kcal) avec ${proteinTarget}g de protéines réparties en 3-4 repas pour saturer la synthèse protéique.`
         : `Déficit calorique modéré (-300 kcal) avec apport protéique protecteur (${proteinTarget}g) et hydratation de 2.8L pour préserver le muscle.`,

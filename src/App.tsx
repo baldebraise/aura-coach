@@ -262,9 +262,9 @@ export const App: React.FC = () => {
     localStorage.setItem('aura_daily_habits', JSON.stringify(dailyHabits));
   }, [dailyHabits]);
 
-  // Clean Reset for a Fresh Healthy Base ("Base saine")
+  // Clean Reset for a Fresh Healthy Base ("Base saine v2")
   useEffect(() => {
-    const CLEAN_SLATE_KEY = 'aura_clean_slate_base_saine_v1';
+    const CLEAN_SLATE_KEY = 'aura_clean_slate_base_saine_v2';
     if (!localStorage.getItem(CLEAN_SLATE_KEY)) {
       localStorage.removeItem('aura_profile');
       localStorage.removeItem('aura_schedule');
@@ -275,6 +275,7 @@ export const App: React.FC = () => {
       localStorage.removeItem('aura_active_test_modal');
       localStorage.removeItem('aura_active_workout_session');
       localStorage.removeItem('aura_agentic_assessment_open');
+      localStorage.removeItem('aura_nutrition_modal_open');
       localStorage.setItem(CLEAN_SLATE_KEY, 'true');
       setProfile(null);
       setSchedule([]);
@@ -328,21 +329,21 @@ export const App: React.FC = () => {
             const initial: UserProfile = {
               id: googleUser.uid,
               name: googleUser.displayName || 'Athlète',
-              age: 28,
-              gender: 'male',
-              heightCm: 178,
-              weightKg: 75,
+              age: undefined,
+              gender: undefined,
+              heightCm: undefined,
+              weightKg: undefined,
               injuries: [],
-              activityLevel: 'moderate',
-              weeklyAvailabilityDays: 3,
+              activityLevel: undefined,
+              weeklyAvailabilityDays: undefined,
               preferredSessionDurationMinutes: 60,
-              primaryGoal: 'recomposition',
+              primaryGoal: undefined,
               secondaryGoals: [],
               baselineTests: [],
               gyms: DEFAULT_GYMS,
               isGoogleAuthenticated: true,
               googleUser,
-              onboardingCompleted: true
+              onboardingCompleted: false
             };
             return initial;
           }
@@ -398,15 +399,30 @@ export const App: React.FC = () => {
       }
       setActiveTab('dashboard');
     } else {
-      // Guide the user directly to the agentic conversational questionnaire
-      setIsAgenticAssessmentOpen(true);
       setActiveTab('dashboard');
     }
   };
 
   // Agentic Assessment Completion Handler
   const handleSaveAgenticAssessment = (updatedProfile: UserProfile) => {
-    let baselineTestsUpdated = updatedProfile.baselineTests || profile?.baselineTests || [];
+    let baselineTestsUpdated: PhysicalTestMetric[] = updatedProfile.baselineTests || profile?.baselineTests || [];
+
+    // Extract recommended tests dynamically from athletic dossier
+    if (updatedProfile.athleticDossier?.recommendedTests && updatedProfile.athleticDossier.recommendedTests.length > 0) {
+      baselineTestsUpdated = updatedProfile.athleticDossier.recommendedTests.map((rec) => {
+        const testId = (rec.id as TestDefinitionId) || 'test-upper';
+        const matchedDef = TEST_DEFINITIONS[testId];
+        const existingVal = baselineTestsUpdated.find((b) => b.id === testId)?.value;
+        return {
+          id: testId,
+          name: rec.name || matchedDef?.title || 'Test Physique',
+          category: (testId === 'test-cardio' ? 'cardio' : 'strength') as any,
+          unit: rec.targetMetric || matchedDef?.unit || 'reps',
+          value: existingVal,
+          instructions: rec.rationale || matchedDef?.categoryName || 'Protocole de test défini par votre coach AURA'
+        };
+      });
+    }
 
     if (updatedProfile.athleticDossier?.baselineTrackingMetrics) {
       const bMetrics = updatedProfile.athleticDossier.baselineTrackingMetrics;
@@ -433,11 +449,18 @@ export const App: React.FC = () => {
       }
     }
 
+    const bMetrics = updatedProfile.athleticDossier?.baselineTrackingMetrics;
+
     const mergedProfile: UserProfile = {
       ...updatedProfile,
       baselineTests: baselineTestsUpdated,
       id: profile?.id || updatedProfile.id || 'athlete-user',
       name: profile?.name || updatedProfile.name || 'Athlète',
+      age: bMetrics?.initialAge || updatedProfile.age || profile?.age,
+      heightCm: bMetrics?.initialHeightCm || updatedProfile.heightCm || profile?.heightCm,
+      weightKg: bMetrics?.initialWeightKg || updatedProfile.weightKg || profile?.weightKg,
+      primaryGoal: updatedProfile.primaryGoal || profile?.primaryGoal || 'muscle_gain',
+      weeklyAvailabilityDays: updatedProfile.weeklyAvailabilityDays || updatedProfile.athleticDossier?.trainingPlanDraft?.options?.[0]?.frequencyDays || 3,
       isGoogleAuthenticated: !!profile?.isGoogleAuthenticated,
       googleUser: profile?.googleUser || null,
       onboardingCompleted: true
@@ -469,6 +492,81 @@ export const App: React.FC = () => {
     setProfile(mergedProfile);
     setSchedule(generatedSchedule);
     setActiveTab('dashboard');
+  };
+
+  // Full Account Reset Handler (Remise à 0 du compte pour repartir sur un compte neuf)
+  const handleFullAccountReset = () => {
+    try {
+      localStorage.removeItem('aura_profile');
+      localStorage.removeItem('aura_schedule');
+      localStorage.removeItem('aura_daily_habits');
+      localStorage.removeItem('aura_agentic_messages');
+      localStorage.removeItem('aura_agentic_dossier');
+      localStorage.removeItem('aura_completed_logs');
+      localStorage.removeItem('aura_active_test_modal');
+      localStorage.removeItem('aura_active_workout_session');
+      localStorage.removeItem('aura_agentic_assessment_open');
+      localStorage.removeItem('aura_nutrition_modal_open');
+      localStorage.removeItem('aura_active_tab');
+      localStorage.removeItem('aura_tab_history');
+    } catch {}
+
+    const googleUser = profile?.googleUser || null;
+    const isGoogle = !!profile?.isGoogleAuthenticated;
+
+    const freshProfile: UserProfile = {
+      id: googleUser ? googleUser.uid : 'athlete-user',
+      name: googleUser?.displayName || 'Athlète',
+      age: undefined,
+      gender: undefined,
+      heightCm: undefined,
+      weightKg: undefined,
+      injuries: [],
+      activityLevel: undefined,
+      weeklyAvailabilityDays: undefined,
+      preferredSessionDurationMinutes: 60,
+      primaryGoal: undefined,
+      secondaryGoals: [],
+      baselineTests: [],
+      gyms: DEFAULT_GYMS,
+      isGoogleAuthenticated: isGoogle,
+      googleUser,
+      onboardingCompleted: false,
+      athleticDossier: undefined
+    };
+
+    setProfile(freshProfile);
+    setSchedule([]);
+    setCompletedLogs([]);
+    setDailyHabits({
+      date: new Date().toISOString().split('T')[0],
+      weightKg: undefined,
+      sleepHours: 0,
+      waterLiters: 0,
+      targetWaterLiters: 2.5,
+      proteinAdequate: false,
+      wholeFoodsAdequate: false,
+      stretchingDone: false
+    });
+    setActiveWorkoutSession(null);
+    setActiveTestModal(null);
+    setIsAgenticAssessmentOpen(false);
+    setIsAccountModalOpen(false);
+    setActiveTab('dashboard');
+
+    try {
+      localStorage.setItem('aura_profile', JSON.stringify(freshProfile));
+    } catch {}
+
+    try {
+      sounds.playRestComplete();
+    } catch {}
+
+    setAuthSuccessToast({
+      message: 'Compte remis à 0 avec succès : profil vierge prêt pour votre premier bilan.',
+      photoURL: googleUser?.photoURL,
+      displayName: freshProfile.name
+    });
   };
 
   // Launch Session Process: 1) Trigger Pre-workout Gym Selector
@@ -777,26 +875,61 @@ export const App: React.FC = () => {
       </header>
 
       {/* Screen Body */}
-      {(!profile || !profile.onboardingCompleted) ? (
+      {(!profile) ? (
         authScreen === 'welcome' ? (
           <WelcomeScreen
-            onStartOnboarding={() => setIsAgenticAssessmentOpen(true)}
+            onStartOnboarding={() => {
+              const freshGuest: UserProfile = {
+                id: 'guest',
+                name: 'Athlète',
+                age: undefined,
+                gender: undefined,
+                heightCm: undefined,
+                weightKg: undefined,
+                injuries: [],
+                activityLevel: undefined,
+                weeklyAvailabilityDays: undefined,
+                preferredSessionDurationMinutes: 60,
+                primaryGoal: undefined,
+                secondaryGoals: [],
+                baselineTests: [],
+                gyms: DEFAULT_GYMS,
+                isGoogleAuthenticated: false,
+                googleUser: null,
+                onboardingCompleted: false
+              };
+              setProfile(freshGuest);
+              setSchedule([]);
+              setIsAgenticAssessmentOpen(true);
+              setActiveTab('dashboard');
+            }}
             onGoogleSignInSuccess={handleGoogleSignInSuccess}
             onError={(err) => setCurrentError({ id: 'err-' + Date.now(), ...err })}
             onOpenFirebaseConfig={() => setIsFirebaseConfigOpen(true)}
             profile={profile}
             onOpenAccountModal={() => setIsAccountModalOpen(true)}
             onEnterApp={() => {
-              const baseProfile = profile || activeOrGuestProfile;
-              const completed: UserProfile = {
-                ...baseProfile,
-                onboardingCompleted: true
+              const freshGuest: UserProfile = {
+                id: 'guest',
+                name: 'Athlète',
+                age: undefined,
+                gender: undefined,
+                heightCm: undefined,
+                weightKg: undefined,
+                injuries: [],
+                activityLevel: undefined,
+                weeklyAvailabilityDays: undefined,
+                preferredSessionDurationMinutes: 60,
+                primaryGoal: undefined,
+                secondaryGoals: [],
+                baselineTests: [],
+                gyms: DEFAULT_GYMS,
+                isGoogleAuthenticated: false,
+                googleUser: null,
+                onboardingCompleted: false
               };
-              setProfile(completed);
-              const activeSchedule = (schedule && schedule.length > 0)
-                ? schedule
-                : generateDefaultSchedule(completed);
-              setSchedule(activeSchedule);
+              setProfile(freshGuest);
+              setSchedule([]);
               setActiveTab('dashboard');
             }}
           />
@@ -811,7 +944,7 @@ export const App: React.FC = () => {
         {activeTab === 'dashboard' && (
           <DashboardView
             profile={profile || activeOrGuestProfile}
-            schedule={(schedule && schedule.length > 0) ? schedule : generateDefaultSchedule(profile || activeOrGuestProfile)}
+            schedule={schedule}
             completedLogs={completedLogs}
             dailyHabits={dailyHabits}
             onUpdateHabits={setDailyHabits}
@@ -821,6 +954,7 @@ export const App: React.FC = () => {
             onOpenGymConfig={() => setIsGymModalDirectOpen(true)}
             onOpenAgenticAssessment={() => setIsAgenticAssessmentOpen(true)}
             onReconfigureProfile={() => setIsAgenticAssessmentOpen(true)}
+            onResetAccount={handleFullAccountReset}
           />
         )}
 
@@ -898,10 +1032,9 @@ export const App: React.FC = () => {
             profile={profile || activeOrGuestProfile}
             onUpdateProfile={setProfile}
             onResetOnboarding={() => {
-              localStorage.removeItem('aura_profile');
-              setProfile(null);
-              setAuthScreen('welcome');
+              setIsAgenticAssessmentOpen(true);
             }}
+            onResetAccount={handleFullAccountReset}
           />
         )}
       </main>
@@ -927,6 +1060,7 @@ export const App: React.FC = () => {
           setIsAccountModalOpen(false);
           setIsFirebaseConfigOpen(true);
         }}
+        onResetAccount={handleFullAccountReset}
       />
 
       {/* Firebase Config Modal */}
@@ -1008,7 +1142,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Bottom Mobile Navigation */}
-      {profile?.onboardingCompleted && (
+      {profile && (
         <Navigation
           activeTab={activeTab}
           onTabChange={navigateToTab}

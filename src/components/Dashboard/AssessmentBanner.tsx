@@ -71,11 +71,11 @@ export const AssessmentBanner: React.FC<AssessmentBannerProps> = ({
 
             {dossier ? (
               <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                {profile.weightKg || 75} kg • {profile.primaryGoal ? goalLabels[profile.primaryGoal] : ''} • Objectif : {dossier.shortTermGoals} ({dossier.recommendedTests.length} tests calibrés).
+                {profile.weightKg ? `${profile.weightKg} kg • ` : ''}{profile.primaryGoal ? `${goalLabels[profile.primaryGoal]} • ` : ''}Objectif : {dossier.shortTermGoals} ({dossier.recommendedTests.length} tests calibrés).
               </p>
             ) : isProfileComplete ? (
               <p className="text-xs text-zinc-400 mt-1">
-                {profile.age} ans • {profile.heightCm} cm • {profile.weightKg} kg • {profile.primaryGoal ? goalLabels[profile.primaryGoal] : ''} • {profile.weeklyAvailabilityDays || 3} séances/semaine
+                {profile.age ? `${profile.age} ans • ` : ''}{profile.heightCm ? `${profile.heightCm} cm • ` : ''}{profile.weightKg ? `${profile.weightKg} kg • ` : ''}{profile.primaryGoal ? `${goalLabels[profile.primaryGoal]} • ` : ''}{profile.weeklyAvailabilityDays ? `${profile.weeklyAvailabilityDays} séances/semaine` : ''}
               </p>
             ) : (
               <p className="text-xs text-zinc-300/90 mt-1 leading-relaxed">

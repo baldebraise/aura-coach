@@ -18,23 +18,81 @@ interface CalibrationBannerProps {
   profile: UserProfile;
   onOpenTest: (testId: TestDefinitionId) => void;
   onOpenGymConfig?: () => void;
+  onOpenAgenticAssessment?: () => void;
 }
 
 export const CalibrationBanner: React.FC<CalibrationBannerProps> = ({
   profile,
   onOpenTest,
-  onOpenGymConfig
+  onOpenGymConfig,
+  onOpenAgenticAssessment
 }) => {
-  const tests: { id: TestDefinitionId; shortName: string; categoryLabel: string; icon: any }[] = [
-    { id: 'test-upper', shortName: 'Haut & Poussée', categoryLabel: 'Pompes', icon: Dumbbell },
-    { id: 'test-lower', shortName: 'Bas & Cuisses', categoryLabel: 'Chaise 90°', icon: Zap },
-    { id: 'test-core', shortName: 'Gainage & Tronc', categoryLabel: 'Planche', icon: Layers },
-    { id: 'test-cardio', shortName: 'Cardio & VMA', categoryLabel: 'Test 6 min', icon: Heart }
-  ];
+  const configuredTests = profile.baselineTests || [];
 
-  const completedTests = profile.baselineTests || [];
+  // When no tests are defined yet (fresh account):
+  if (configuredTests.length === 0) {
+    return (
+      <div className="p-4 bg-zinc-900/40 border border-zinc-800/80 rounded-2xl relative overflow-hidden transition">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-amber-400 shrink-0">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/60">
+                  En attente de cadrage
+                </span>
+                <span className="text-[10px] font-mono text-zinc-500">
+                  0 test pré-enregistré
+                </span>
+              </div>
+              <h3 className="text-sm font-bold text-zinc-100 mt-1">
+                Tests Physiques de Référence
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                Aucun test physique prédéfini. Vos protocoles de test (force relative, endurance musculaire ou capacité aérobie) seront spécifiquement sélectionnés par le Coach AURA lors de votre premier bilan initial selon vos objectifs et antécédents.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {onOpenAgenticAssessment && (
+          <div className="mt-3.5 pt-3 border-t border-zinc-800/60">
+            <button
+              onClick={onOpenAgenticAssessment}
+              className="w-full py-2.5 px-3 bg-zinc-800 hover:bg-zinc-700 active:scale-[0.99] text-zinc-200 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-2"
+            >
+              <span>Définir mes tests avec le Coach AURA</span>
+              <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Map tests based on configured tests in profile
+  const testIcons: Record<string, any> = {
+    'test-upper': Dumbbell,
+    'test-lower': Zap,
+    'test-core': Layers,
+    'test-cardio': Heart
+  };
+
+  const tests = configuredTests.map((t) => {
+    const matchedDef = TEST_DEFINITIONS[t.id as TestDefinitionId];
+    return {
+      id: (t.id as TestDefinitionId) || 'test-upper',
+      shortName: t.name || matchedDef?.title || 'Test Physique',
+      categoryLabel: t.unit || matchedDef?.unit || 'reps',
+      icon: testIcons[t.id] || Dumbbell
+    };
+  });
+
+  const completedTests = configuredTests;
   const completedCount = tests.filter((t) => completedTests.some((b) => b.id === t.id && b.value !== undefined)).length;
-  const progressPercent = Math.round((completedCount / tests.length) * 100);
+  const progressPercent = tests.length > 0 ? Math.round((completedCount / tests.length) * 100) : 0;
 
   return (
     <div className="p-4 bg-gradient-to-br from-zinc-900/90 via-zinc-950 to-zinc-950 border border-zinc-800 rounded-2xl shadow-lg relative overflow-hidden">

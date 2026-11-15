@@ -2,8 +2,38 @@ import { UserProfile, MacroTarget } from '../types';
 import { initializeFirebaseApp } from './firebase';
 import { getAI, getGenerativeModel } from 'firebase/ai';
 
+export function isNutritionCalibrated(profile?: UserProfile | null): boolean {
+  if (!profile) return false;
+  return !!(profile.athleticDossier || (profile.weightKg && profile.primaryGoal));
+}
+
 export function calculateNutritionTargets(profile: UserProfile, isWorkoutDay: boolean): MacroTarget {
-  const weight = profile.weightKg || 75;
+  // If the athletic dossier provides tailored nutrition from the AI agent:
+  if (profile.athleticDossier?.nutritionLifestyleDraft) {
+    const draft = profile.athleticDossier.nutritionLifestyleDraft;
+    const baseCals = draft.dailyCaloriesTarget || 2200;
+    const cyclingDelta = isWorkoutDay ? +150 : -150;
+    const calories = Math.max(1400, baseCals + cyclingDelta);
+    const proteinGrams = draft.proteinGramsTarget || 140;
+    const proteinCalories = proteinGrams * 4;
+    const fatCalories = Math.round(calories * 0.25);
+    const fatGrams = Math.round(fatCalories / 9);
+    const carbsCalories = Math.max(200, calories - proteinCalories - fatCalories);
+    const carbsGrams = Math.round(carbsCalories / 4);
+    return {
+      calories,
+      proteinGrams,
+      carbsGrams,
+      fatGrams,
+      waterLiters: draft.waterLitersTarget || 2.5,
+      isWorkoutDay,
+      bmr: Math.round(baseCals * 0.7),
+      tdee: baseCals,
+      goalDeltaCalories: cyclingDelta
+    };
+  }
+
+  const weight = profile.weightKg || 70;
   const height = profile.heightCm || 175;
   const age = profile.age || 28;
   const isFemale = profile.gender === 'female';

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserProfile, DailyHabits, PlannedWorkoutSession } from '../../types';
-import { calculateNutritionTargets, generateNutritionSummaryAdvice } from '../../services/nutrition';
+import { calculateNutritionTargets, generateNutritionSummaryAdvice, isNutritionCalibrated } from '../../services/nutrition';
 import { sounds } from '../../utils/audio';
 import { 
   Utensils, 
@@ -35,6 +35,48 @@ export const DashboardNutritionWidget: React.FC<DashboardNutritionWidgetProps> =
   onOpenDetailedNutrition
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
+
+  const isCalibrated = isNutritionCalibrated(profile);
+
+  if (!isCalibrated) {
+    return (
+      <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-4 transition">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-emerald-400 shrink-0">
+              <Utensils className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono uppercase tracking-wider font-bold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/60">
+                  En attente de cadrage
+                </span>
+                <span className="text-[10px] font-mono text-zinc-500">
+                  Aucune donnée fictive
+                </span>
+              </div>
+              <h3 className="text-sm font-bold text-zinc-100 mt-1">
+                Nutrition & Énergie Athlétique
+              </h3>
+              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                Aucune cible calorique ou macro-nutritionnelle n'est pré-enregistrée. Échangez avec le coach nutrition ou réalisez votre premier bilan pour calibrer vos apports réels selon votre morphologie et vos dépenses.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3.5 pt-3 border-t border-zinc-800/60 flex items-center justify-between gap-2">
+          <button
+            onClick={onOpenDetailedNutrition}
+            className="w-full py-2.5 px-3 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-zinc-950 text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
+          >
+            <Bot className="w-4 h-4" />
+            <span>Discuter avec le coach nutrition</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const targets = calculateNutritionTargets(profile, isWorkoutDay);
   const advice = generateNutritionSummaryAdvice(profile, isWorkoutDay, todaySession?.title);

@@ -13,12 +13,14 @@ interface ProfileViewProps {
   profile: UserProfile;
   onUpdateProfile: (updated: UserProfile) => void;
   onResetOnboarding: () => void;
+  onResetAccount?: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
   profile,
   onUpdateProfile,
-  onResetOnboarding
+  onResetOnboarding,
+  onResetAccount
 }) => {
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-200">
@@ -31,13 +33,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <div>
             <h1 className="text-base font-bold text-zinc-100">{profile.name}</h1>
             <p className="text-xs text-zinc-500">
-              {profile.age} ans • {profile.heightCm} cm • {profile.weightKg} kg
+              {profile.age ? `${profile.age} ans` : '-- ans'} • {profile.heightCm ? `${profile.heightCm} cm` : '-- cm'} • {profile.weightKg ? `${profile.weightKg} kg` : '-- kg'}
             </p>
           </div>
         </div>
 
         <span className="text-[10px] font-mono uppercase px-2 py-1 bg-emerald-950/60 border border-emerald-800/80 text-emerald-400 rounded-lg">
-          {profile.primaryGoal}
+          {profile.primaryGoal || 'Non calibré'}
         </span>
       </div>
 
@@ -121,26 +123,32 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <h3 className="text-sm font-semibold text-zinc-100">Tests Physiques de Référence</h3>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          {profile.baselineTests.map((t) => (
-            <div
-              key={t.id}
-              className="p-2.5 bg-zinc-950/80 border border-zinc-800/80 rounded-xl text-xs"
-            >
-              <span className="text-zinc-400 block truncate text-[11px]">{t.name}</span>
-              <span className="text-sm font-mono font-bold text-zinc-100 mt-0.5 block">
-                {t.value || '-'} {t.unit}
-              </span>
-            </div>
-          ))}
-        </div>
+        {profile.baselineTests.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2">
+            {profile.baselineTests.map((t) => (
+              <div
+                key={t.id}
+                className="p-2.5 bg-zinc-950/80 border border-zinc-800/80 rounded-xl text-xs"
+              >
+                <span className="text-zinc-400 block truncate text-[11px]">{t.name}</span>
+                <span className="text-sm font-mono font-bold text-zinc-100 mt-0.5 block">
+                  {t.value || '-'} {t.unit}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-zinc-500 italic py-2">
+            Aucun test physique prédéfini. Vos tests seront calibrés lors de votre premier bilan initial.
+          </p>
+        )}
       </div>
 
-      {/* Reset Onboarding Option */}
-      <div className="pt-2">
+      {/* Reset Options */}
+      <div className="pt-2 space-y-2">
         <button
           onClick={() => {
-            if (window.confirm('Voulez-vous réinitialiser le questionnaire d état des lieux ?')) {
+            if (window.confirm('Voulez-vous réinitialiser le questionnaire de cadrage ?')) {
               onResetOnboarding();
             }
           }}
@@ -149,6 +157,20 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Refaire l'état des lieux & questionnaire</span>
         </button>
+
+        {onResetAccount && (
+          <button
+            onClick={() => {
+              if (window.confirm('Êtes-vous sûr de vouloir remettre le compte à zéro ? Toutes vos données, tests, plan et historique seront effacés.')) {
+                onResetAccount();
+              }
+            }}
+            className="w-full py-2.5 bg-zinc-950 hover:bg-rose-950/60 border border-zinc-800 hover:border-rose-900 text-zinc-500 hover:text-rose-400 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-2"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
+            <span>Remettre le compte à zéro (Base saine)</span>
+          </button>
+        )}
       </div>
     </div>
   );
