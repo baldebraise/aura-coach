@@ -206,8 +206,8 @@ Tu dois impérativement répondre au format JSON strict suivant (sans balises de
       "initialWeightKg": 78,
       "initialHeightCm": 180,
       "initialAge": 28,
-      "initialBenchmarkMetricName": "Pompes strictes au sol",
-      "initialBenchmarkValue": 15,
+      "initialBenchmarkMetricName": "Tractions strictes ou Pompes",
+      "initialBenchmarkValue": 5,
       "initialBenchmarkUnit": "reps"
     },
     "confidenceScore": 85,

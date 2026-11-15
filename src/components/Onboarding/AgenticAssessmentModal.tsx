@@ -722,7 +722,7 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
                       Initialisation des premières courbes de suivi
                     </span>
                     <p className="text-[11px] text-zinc-400">
-                      Poids de référence : <span className="text-zinc-200 font-mono font-bold">{activeDossier.baselineTrackingMetrics.initialWeightKg || 75} kg</span> • Benchmark repère : <span className="text-zinc-200 font-mono font-bold">{activeDossier.baselineTrackingMetrics.initialBenchmarkMetricName || 'Pompes'} ({activeDossier.baselineTrackingMetrics.initialBenchmarkValue || 15} {activeDossier.baselineTrackingMetrics.initialBenchmarkUnit || 'reps'})</span>. Vos graphiques démarrent avec ces points réels.
+                      Poids de référence : <span className="text-zinc-200 font-mono font-bold">{activeDossier.baselineTrackingMetrics.initialWeightKg || '--'} kg</span> • Benchmark cible : <span className="text-zinc-200 font-mono font-bold">{activeDossier.baselineTrackingMetrics.initialBenchmarkMetricName || 'Pompes'} (Cible : {activeDossier.baselineTrackingMetrics.initialBenchmarkValue || 10} {activeDossier.baselineTrackingMetrics.initialBenchmarkUnit || 'reps'})</span>. Test à réaliser pour calibrer vos charges.
                     </p>
                   </div>
                 </div>

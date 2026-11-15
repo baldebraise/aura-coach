@@ -126,7 +126,20 @@ export const App: React.FC = () => {
   const [profile, setProfile] = useState<UserProfile | null>(() => {
     try {
       const saved = localStorage.getItem('aura_profile');
-      return saved ? JSON.parse(saved) : null;
+      if (saved) {
+        const parsed: UserProfile = JSON.parse(saved);
+        // Clean any falsely validated tests from initial benchmark (e.g. 5 tractions marked as done before execution)
+        if (parsed.baselineTests && parsed.baselineTests.length > 0) {
+          parsed.baselineTests = parsed.baselineTests.map((t) => {
+            if (t.instructions && (t.instructions.includes('cadrage') || t.instructions.includes('Directeur Scientifique') || t.instructions.includes('bilan'))) {
+              return { ...t, target: t.value || t.target, value: undefined, date: undefined };
+            }
+            return t;
+          });
+        }
+        return parsed;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -432,15 +445,16 @@ export const App: React.FC = () => {
           weightKg: bMetrics.initialWeightKg
         }));
       }
-      if (bMetrics.initialBenchmarkValue && bMetrics.initialBenchmarkMetricName) {
+      if (bMetrics.initialBenchmarkMetricName) {
+        const existingVal = baselineTestsUpdated.find((t) => t.id === 'test-upper')?.value;
         const initialBenchmark: PhysicalTestMetric = {
           id: 'test-upper',
           name: bMetrics.initialBenchmarkMetricName,
           category: 'strength',
           unit: bMetrics.initialBenchmarkUnit || 'reps',
-          value: bMetrics.initialBenchmarkValue,
-          date: new Date().toISOString(),
-          instructions: 'Initialisé lors du bilan agentique de cadrage'
+          target: bMetrics.initialBenchmarkValue,
+          value: existingVal, // Keep undefined if not yet manually completed by athlete
+          instructions: 'Test de référence défini lors du bilan de cadrage'
         };
         baselineTestsUpdated = [
           ...baselineTestsUpdated.filter((t) => t.id !== 'test-upper'),
@@ -835,8 +849,8 @@ export const App: React.FC = () => {
             </button>
           )}
 
-          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-emerald-400 font-semibold" title="Version 1.3">
-            v1.3
+          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-emerald-400 font-semibold" title="Version 1.4">
+            v1.4
           </span>
         </div>
 
