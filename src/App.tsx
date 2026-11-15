@@ -262,6 +262,36 @@ export const App: React.FC = () => {
     localStorage.setItem('aura_daily_habits', JSON.stringify(dailyHabits));
   }, [dailyHabits]);
 
+  // Clean Reset for a Fresh Healthy Base ("Base saine")
+  useEffect(() => {
+    const CLEAN_SLATE_KEY = 'aura_clean_slate_base_saine_v1';
+    if (!localStorage.getItem(CLEAN_SLATE_KEY)) {
+      localStorage.removeItem('aura_profile');
+      localStorage.removeItem('aura_schedule');
+      localStorage.removeItem('aura_daily_habits');
+      localStorage.removeItem('aura_agentic_messages');
+      localStorage.removeItem('aura_agentic_dossier');
+      localStorage.removeItem('aura_completed_logs');
+      localStorage.removeItem('aura_active_test_modal');
+      localStorage.removeItem('aura_active_workout_session');
+      localStorage.removeItem('aura_agentic_assessment_open');
+      localStorage.setItem(CLEAN_SLATE_KEY, 'true');
+      setProfile(null);
+      setSchedule([]);
+      setCompletedLogs([]);
+      setDailyHabits({
+        date: new Date().toISOString().split('T')[0],
+        weightKg: undefined,
+        sleepHours: 0,
+        waterLiters: 0,
+        targetWaterLiters: 2.5,
+        proteinAdequate: false,
+        wholeFoodsAdequate: false,
+        stretchingDone: false
+      });
+    }
+  }, []);
+
   // Subscribe to Firebase Auth State changes (persists login across refreshes)
   useEffect(() => {
     // 1. Process redirect result if page was reloaded by Google OAuth redirect

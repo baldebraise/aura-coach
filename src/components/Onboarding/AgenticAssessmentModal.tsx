@@ -28,6 +28,7 @@ import {
   Layers, 
   HelpCircle,
   TrendingUp,
+  RotateCcw,
   Check
 } from 'lucide-react';
 
@@ -38,36 +39,47 @@ interface AgenticAssessmentModalProps {
   onSaveAssessment: (updatedProfile: UserProfile) => void;
 }
 
+const INITIAL_WELCOME_MESSAGE = {
+  id: 'msg-welcome',
+  sender: 'agent' as const,
+  text: `Bonjour ! Je suis ton conseiller scientifique et athlétique AURA.
+
+Nous allons construire ensemble ta programmation sur mesure, en échange direct et sans aucun QCM rigide.
+
+Pour démarrer : quel est ton prénom (ou pseudo), et quel est ton grand objectif physique ou sportif en ce moment ?`
+};
+
 export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
   isOpen,
   onClose,
   currentProfile,
   onSaveAssessment
 }) => {
-  // Dialogue stream
+  // Dialogue stream persisted
   const [messages, setMessages] = useState<Array<{
     id: string;
     sender: 'agent' | 'user';
     text: string;
-  }>>([
-    {
-      id: 'msg-welcome',
-      sender: 'agent',
-      text: `Bonjour. Je suis votre conseiller scientifique et athlétique AURA.
-
-Pour concevoir une programmation sur mesure sans QCM rigide, parlez-moi librement de votre situation :
-• Votre gabarit (âge, poids, taille si connus)
-• Votre métier et rythme de vie quotidien (sédentaire au bureau, debout, travail de nuit...)
-• Votre historique sportif et votre niveau de condition physique actuel
-• Vos objectifs prioritaires à court et long terme
-• Vos éventuelles douleurs ou articulations sensibles (épaules, genoux, dos...)
-• Vos disponibilités hebdomadaires et votre lieu d'entraînement (salle commerciale, maison...)`
+  }>>(() => {
+    try {
+      const saved = localStorage.getItem('aura_agentic_messages');
+      return saved ? JSON.parse(saved) : [INITIAL_WELCOME_MESSAGE];
+    } catch {
+      return [INITIAL_WELCOME_MESSAGE];
     }
-  ]);
+  });
 
   const [inputText, setInputText] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [activeDossier, setActiveDossier] = useState<AgenticAthleticDossier | null>(currentProfile.athleticDossier || null);
+  const [activeDossier, setActiveDossier] = useState<AgenticAthleticDossier | null>(() => {
+    try {
+      const saved = localStorage.getItem('aura_agentic_dossier');
+      if (saved) return JSON.parse(saved);
+      return currentProfile.athleticDossier || null;
+    } catch {
+      return currentProfile.athleticDossier || null;
+    }
+  });
   const [selectedPlanOptionIndex, setSelectedPlanOptionIndex] = useState<number>(0);
   const [activeDossierTab, setActiveDossierTab] = useState<'condition' | 'plan' | 'nutrition' | 'tests'>('condition');
 
@@ -81,16 +93,38 @@ Pour concevoir une programmation sur mesure sans QCM rigide, parlez-moi libremen
     scrollToBottom();
   }, [messages, isAnalyzing]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('aura_agentic_messages', JSON.stringify(messages));
+    } catch {}
+  }, [messages]);
+
+  useEffect(() => {
+    try {
+      if (activeDossier) {
+        localStorage.setItem('aura_agentic_dossier', JSON.stringify(activeDossier));
+      }
+    } catch {}
+  }, [activeDossier]);
+
   if (!isOpen) return null;
 
-  const handleSendMessage = async () => {
-    const text = inputText.trim();
+  const handleResetConversation = () => {
+    localStorage.removeItem('aura_agentic_messages');
+    localStorage.removeItem('aura_agentic_dossier');
+    setMessages([INITIAL_WELCOME_MESSAGE]);
+    setActiveDossier(null);
+    setInputText('');
+  };
+
+  const handleSendMessage = async (customText?: string) => {
+    const text = (typeof customText === 'string' ? customText : inputText).trim();
     if (!text || isAnalyzing) return;
 
     const userMessageId = 'user-' + Date.now();
     const updatedMessages = [...messages, { id: userMessageId, sender: 'user' as const, text }];
     setMessages(updatedMessages);
-    setInputText('');
+    if (!customText) setInputText('');
     setIsAnalyzing(true);
 
     try {
@@ -126,7 +160,7 @@ Pour concevoir une programmation sur mesure sans QCM rigide, parlez-moi libremen
         {
           id: 'agent-err-' + Date.now(),
           sender: 'agent',
-          text: "J'ai bien noté vos éléments. Vos paramètres ont été intégrés au dossier ci-dessous."
+          text: "C'est bien noté. Peux-tu me préciser également ton rythme de vie et tes disponibilités d'entraînement ?"
         }
       ]);
     } finally {
@@ -187,9 +221,13 @@ Pour concevoir une programmation sur mesure sans QCM rigide, parlez-moi libremen
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-bold text-zinc-100">Bilan Athlétique Agentique</h2>
-                {activeDossier && (
+                {activeDossier && activeDossier.isReadyForValidation ? (
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/80 text-emerald-400 font-semibold">
-                    Confiance {activeDossier.confidenceScore}%
+                    Plan Finalisé ({activeDossier.confidenceScore}%)
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
+                    Question par question
                   </span>
                 )}
               </div>
@@ -198,12 +236,22 @@ Pour concevoir une programmation sur mesure sans QCM rigide, parlez-moi libremen
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-200 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleResetConversation}
+              title="Recommencer à zéro sur une base saine"
+              className="px-2.5 py-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition flex items-center gap-1.5 text-[11px]"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
+              <span className="hidden sm:inline">Recommencer</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg text-zinc-400 hover:text-zinc-200 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Main Body: Scrollable Dialogue & Dossier Card */}
@@ -236,10 +284,24 @@ Pour concevoir une programmation sur mesure sans QCM rigide, parlez-moi libremen
                 <span>Raisonnement biomécanique et élaboration du plan...</span>
               </div>
             )}
+
+            {/* Early finalization button if user provided several answers and wants the plan right now */}
+            {!activeDossier?.isReadyForValidation && messages.filter((m) => m.sender === 'user').length >= 2 && !isAnalyzing && (
+              <div className="flex justify-center pt-2 pb-1">
+                <button
+                  type="button"
+                  onClick={() => handleSendMessage("J'ai donné l'essentiel, génère mon plan et mes recommandations maintenant s'il te plaît.")}
+                  className="text-[11px] font-mono text-zinc-400 hover:text-emerald-400 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800 hover:border-emerald-700/60 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>J'ai partagé l'essentiel, finaliser mon plan dès maintenant</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* DYNAMIC ATHLETIC DOSSIER CARD (Fiche de Cadrage Athlétique) */}
-          {activeDossier && (
+          {/* DYNAMIC ATHLETIC DOSSIER CARD (Fiche de Cadrage Athlétique) - PROPOSÉ SEULEMENT QUAND TERMINÉ */}
+          {activeDossier && activeDossier.isReadyForValidation && (
             <div className="p-4 bg-gradient-to-br from-zinc-900/95 via-zinc-950 to-zinc-900/95 border border-emerald-700/80 rounded-2xl shadow-xl space-y-4 animate-in fade-in duration-300">
               {/* Dossier Header */}
               <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
@@ -559,7 +621,7 @@ Pour concevoir une programmation sur mesure sans QCM rigide, parlez-moi libremen
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 pr-12 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500 resize-none"
             />
             <button
-              onClick={handleSendMessage}
+              onClick={() => handleSendMessage()}
               disabled={!inputText.trim() || isAnalyzing}
               className="absolute right-2.5 bottom-2.5 p-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-lg transition disabled:opacity-40"
               title="Envoyer"

@@ -22,6 +22,9 @@ export async function runAgenticSportsScientistTurn(
     .map((m) => `${m.role === 'user' ? 'Athlète' : 'Coach AURA'}: ${m.text}`)
     .join('\n\n');
 
+  const userTurns = dialogueHistory.filter((m) => m.role === 'user').length;
+  const isFinishingRequested = dialogueHistory.some(m => m.role === 'user' && /(?:fini|terminer|valid|prêt|c'est bon|générer|tout dit)/i.test(m.text));
+
   // Try Gemini 2.5 Flash via Firebase AI Logic
   try {
     const { app } = initializeFirebaseApp();
@@ -30,23 +33,28 @@ export async function runAgenticSportsScientistTurn(
       const model = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
 
       const prompt = `Tu es le Directeur Scientifique et Entraîneur de Performance de l'application AURA.
-Tu échanges avec un athlète pour son bilan initial exhaustif.
+Tu échanges avec un athlète pour son cadrage initial.
 
-IMPORTANT :
-- ZÉRO EMOJI dans toutes tes réponses.
-- Ne récite JAMAIS de questionnaire pré-établi ni de questions types en liste rigide.
-- Réfléchis CONCRÈTEMENT en fonction de TOUT ce que l'athlète a dit jusqu'ici.
-- Pose des questions adaptées et fluides sur son mode de vie, son métier (sédentaire vs actif), son historique sportif, son sommeil, ses sensations articulaires ou ses disponibilités réelles.
-- Émets un plan structuré avec des objectifs court terme (4-6 semaines) et long terme (6-12 mois), des retours sur les résultats espérés, des réserves s'il manque des données, et comment les obtenir via des tests de terrain.
-- Propose des variantes/options de programmation (ex. 3 jours Full Body vs 4 jours Upper/Lower).
-- Détermine les premières variables de suivi (poids de référence, performance repère).
+RÈGLES ABSOLUES DU DIALOGUE :
+1. POSE LES QUESTIONS STRICTEMENT UNE À UNE. Ne pose JAMAIS deux questions dans la même réponse. Ne fais AUCUNE liste à puces de questions.
+2. Réagis d'abord brièvement à ce que l'athlète vient d'exprimer (1-2 phrases courtes, valorisantes, techniques et empathiques).
+3. Pose ensuite LA SEULE ET UNIQUE question suivante pour approfondir son profil :
+   - Étape 1 : Son objectif principal et sa motivation (s'il ne l'a pas encore dit).
+   - Étape 2 : Son passé sportif et son niveau actuel (débutant, reprise, années de muscu, sports pratiqués).
+   - Étape 3 : Son métier et son rythme de vie au quotidien (bureau/assis, physique/debout, sommeil et niveau de fatigue).
+   - Étape 4 : Ses disponibilités réelles (nombre de séances par semaine) et son matériel/lieu (salle de musculation complète, maison avec haltères, ou poids du corps).
+   - Étape 5 : Ses éventuelles douleurs, articulations sensibles ou blessures passées (épaules, dos, genoux...) et son gabarit approximatif (âge, taille, poids).
+4. NE PROPOSE LA VALIDATION SEULEMENT QUAND C'EST FINI :
+   - Tant que toutes ces dimensions n'ont pas été abordées (${userTurns < 4 && !isFinishingRequested ? 'actuellement ' + userTurns + ' échanges seulement' : 'sauf si l\'athlète a déjà tout expliqué ou qu\'au moins 4-5 échanges ont eu lieu'}), "isReadyForValidation" DOIT ÊTRE false.
+   - Quand "isReadyForValidation" est false : ton "assistantReply" pose uniquement la prochaine question ciblée (1 question seulement).
+   - Quand "isReadyForValidation" est true : ton "assistantReply" annonce chaleureusement que le diagnostic est terminé et que son dossier complet d'entraînement et de nutrition a été généré ci-dessous.
 
 Voici l'historique complet de la discussion :
 ${fullConversationText}
 
 Tu dois impérativement répondre au format JSON strict suivant (sans balises de code ni texte autour) :
 {
-  "assistantReply": "Ton message de dialogue direct avec l'athlète (technique, direct, posant 1 ou 2 questions pertinentes et ciblées sur son mode de vie, sans liste à puces répétitive).",
+  "assistantReply": "Ton message : réaction concise + EXACTEMENT UNE SEULE QUESTION si isReadyForValidation est false, ou annonce enthousiaste du dossier final si isReadyForValidation est true.",
   "dossier": {
     "physicalConditionSummary": "Synthèse biomécanique et morphologique de sa condition physique actuelle déduite de ses propos.",
     "recommendedTests": [
@@ -117,7 +125,7 @@ Tu dois impérativement répondre au format JSON strict suivant (sans balises de
       "initialBenchmarkUnit": "reps"
     },
     "confidenceScore": 85,
-    "isReadyForValidation": true
+    "isReadyForValidation": ${userTurns >= 4 || isFinishingRequested ? 'true' : 'false'}
   }
 }`;
 
@@ -151,6 +159,15 @@ function generateContextualFallbackDossier(
     .map((m) => m.text)
     .join(' ');
   const lower = allUserText.toLowerCase();
+  const turnsCount = dialogueHistory.filter((m) => m.role === 'user').length;
+  const isFinishingRequested = /(?:fini|terminer|valid|prêt|c'est bon|générer|tout dit)/i.test(lower);
+
+  // Check what has already been covered
+  const hasGoal = /(?:muscle|masse|force|perte|gras|sécher|seche|kilos|silhouette|forme|endurance|cardio|recomposition|santé|vitalité|puissance)/i.test(lower);
+  const hasHistory = /(?:débutant|reprise|expérience|jamais|pratique|ans|année|musculation|crossfit|course|vélo|natation|foot|sport)/i.test(lower);
+  const hasLifestyle = /(?:bureau|assis|debout|travail|métier|sédentaire|sommeil|dors|dort|fatigue|rythme|énergie|nuit)/i.test(lower);
+  const hasAvailability = /(?:séance|fois|jour|semaine|lundi|mercredi|vendredi|salle|basic|fitness|maison|domicile|haltère|poids du corps)/i.test(lower);
+  const hasHealthStats = /(?:douleur|blessure|mal|sensib|épaule|epaule|genou|dos|lombaire|tendon|pèse|poids|taille|kg|cm|ans)/i.test(lower);
 
   // Extraction de données physiques réelles
   let age = previousDossier?.baselineTrackingMetrics.initialAge || currentProfile.age;
@@ -202,14 +219,30 @@ function generateContextualFallbackDossier(
   const calorieTarget = isHypertrophy ? tdee + 250 : isFatLoss ? tdee - 350 : tdee;
   const proteinTarget = Math.round(w * (isFatLoss ? 2.2 : 2.0));
 
-  // Génération de la réponse de l'agent (contextuelle, jamais fixe)
+  // Détermination de la progression et de la prochaine question unique (UNE SEULE QUESTION À LA FOIS)
   let assistantReply = "";
-  const turnsCount = dialogueHistory.filter((m) => m.role === 'user').length;
+  let isReadyForValidation = false;
 
-  if (turnsCount <= 1) {
-    assistantReply = `J'ai analysé vos premières indications. Pour bâtir une programmation qui s'insère parfaitement dans votre quotidien et tienne sur la durée, j'ai besoin de comprendre votre mode de vie : travaillez-vous plutôt assis ou debout ? Avez-vous un historique de blessure ou de pratique sportive antérieure ? Comment qualifieriez-vous votre sommeil et votre niveau d'énergie actuel ?`;
+  const isComplete = turnsCount >= 4 || isFinishingRequested || (hasGoal && hasHistory && hasLifestyle && hasAvailability && hasHealthStats);
+
+  if (isComplete) {
+    isReadyForValidation = true;
+    assistantReply = `C'est un excellent cadrage. J'ai réuni l'ensemble des éléments clés sur ton mode de vie, tes antécédents et tes objectifs.
+
+J'ai généré ton Dossier de Cadrage Athlétique personnalisé ci-dessous. Explore les onglets, choisis l'option de répartition qui te convient le mieux, et valide ton plan pour démarrer ton suivi en direct !`;
+  } else if (!hasGoal) {
+    assistantReply = `C'est un plaisir d'échanger avec toi. Quel est le grand objectif physique ou sportif qui te motive le plus en ce moment ?`;
+  } else if (!hasHistory) {
+    assistantReply = `C'est un excellent cap. Pour calibrer précisément l'intensité et le volume de travail : quel est ton passé sportif et ton niveau actuel ? (Tu débutes en musculation, tu pratiques déjà régulièrement, ou c'est une reprise après une pause ?)`;
+  } else if (!hasLifestyle) {
+    assistantReply = `C'est bien noté. Pour que le programme s'intègre parfaitement à ton quotidien sans épuiser ta récupération : à quoi ressemble ton rythme de vie professionnel (travail sédentaire de bureau ou travail physique debout) et comment qualifierais-tu ton sommeil ?`;
+  } else if (!hasAvailability) {
+    assistantReply = `Compris, ce paramètre est capital pour la régularité. Côté organisation : combien de séances par semaine peux-tu réellement consacrer à tes entraînements, et dans quel cadre vas-tu t'entraîner (salle de sport équipée, à domicile avec matériel, ou sans équipement) ?`;
+  } else if (!hasHealthStats) {
+    assistantReply = `Très clair. Sur le plan corporel et articulaire : as-tu des sensibilités ou d'anciennes blessures à préserver (épaules, genoux, dos...) ? Et si tu les connais, quel est ton gabarit approximatif (taille, poids et âge) ?`;
   } else {
-    assistantReply = `Votre profil s'affine nettement. Sur la base de votre gabarit (${w} kg pour ${h} cm) et de votre disponibilité (${daysPerWeek} séances/semaine), je structure un plan axé sur la progression mécanique avec protection de vos articulations sensibles. J'ai formulé l'ébauche complète de cadrage ci-dessous avec les tests à réaliser pour calibrer vos charges de travail exactes.`;
+    isReadyForValidation = true;
+    assistantReply = `Parfait, j'ai maintenant toutes les données nécessaires pour structurer ton plan sur mesure. Ton Dossier de Cadrage Athlétique est prêt ci-dessous. Découvre tes cibles et valide dès que tu es prêt à attaquer !`;
   }
 
   const recommendedTests: RecommendedTestPlan[] = [
@@ -325,8 +358,8 @@ function generateContextualFallbackDossier(
       initialBenchmarkValue: 15,
       initialBenchmarkUnit: 'reps'
     },
-    confidenceScore: turnsCount >= 2 ? 90 : 70,
-    isReadyForValidation: turnsCount >= 1 && !!w && !!h
+    confidenceScore: isReadyForValidation ? 90 : Math.min(80, 40 + turnsCount * 12),
+    isReadyForValidation: isReadyForValidation
   };
 
   return {
