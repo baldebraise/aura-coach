@@ -29,6 +29,7 @@ import {
   HelpCircle,
   TrendingUp,
   RotateCcw,
+  Key,
   Check
 } from 'lucide-react';
 
@@ -83,6 +84,12 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
   const [selectedPlanOptionIndex, setSelectedPlanOptionIndex] = useState<number>(0);
   const [activeDossierTab, setActiveDossierTab] = useState<'condition' | 'plan' | 'nutrition' | 'tests'>('condition');
 
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
+    return localStorage.getItem('aura_gemini_api_key') || currentProfile.geminiApiKey || '';
+  });
+  const [isKeyInputOpen, setIsKeyInputOpen] = useState<boolean>(false);
+  const [keyInputDraft, setKeyInputDraft] = useState<string>('');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -136,7 +143,7 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
 
       const result = await runAgenticSportsScientistTurn(
         dialogueForAi,
-        currentProfile,
+        { ...currentProfile, geminiApiKey },
         activeDossier || undefined
       );
 
@@ -238,6 +245,21 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
           </div>
           <div className="flex items-center gap-1.5">
             <button
+              onClick={() => {
+                setKeyInputDraft(geminiApiKey);
+                setIsKeyInputOpen(!isKeyInputOpen);
+              }}
+              title="Configurer une clé Google Gemini directe (optionnel)"
+              className={`px-2.5 py-1 rounded-lg border transition flex items-center gap-1.5 text-[11px] ${
+                geminiApiKey 
+                  ? 'bg-emerald-950/70 border-emerald-700/80 text-emerald-400 font-semibold' 
+                  : 'text-zinc-400 hover:text-zinc-200 border-zinc-800 hover:bg-zinc-900'
+              }`}
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{geminiApiKey ? 'Gemini 2.5 Actif' : 'Clé IA'}</span>
+            </button>
+            <button
               onClick={handleResetConversation}
               title="Recommencer à zéro sur une base saine"
               className="px-2.5 py-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition flex items-center gap-1.5 text-[11px]"
@@ -253,6 +275,50 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Optional Gemini API Key Drawer */}
+        {isKeyInputOpen && (
+          <div className="p-3 bg-zinc-900/90 border-b border-zinc-800 shrink-0 space-y-2 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-zinc-200 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Connexion directe Google Gemini (optionnelle)</span>
+              </span>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] text-emerald-400 hover:underline"
+              >
+                Obtenir une clé gratuite
+              </a>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="password"
+                value={keyInputDraft}
+                onChange={(e) => setKeyInputDraft(e.target.value)}
+                placeholder="Collez votre clé API Gemini (AIzaSy...)"
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                onClick={() => {
+                  const cleaned = keyInputDraft.trim();
+                  setGeminiApiKey(cleaned);
+                  if (cleaned) {
+                    localStorage.setItem('aura_gemini_api_key', cleaned);
+                  } else {
+                    localStorage.removeItem('aura_gemini_api_key');
+                  }
+                  setIsKeyInputOpen(false);
+                }}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-lg transition"
+              >
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Main Body: Scrollable Dialogue & Dossier Card */}
         <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-3 pr-1 overscroll-contain">
