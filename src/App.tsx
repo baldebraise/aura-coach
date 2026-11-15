@@ -835,8 +835,8 @@ export const App: React.FC = () => {
             </button>
           )}
 
-          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-500">
-            v1.0
+          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-emerald-400 font-semibold" title="Version 1.1">
+            v1.1
           </span>
         </div>
 
