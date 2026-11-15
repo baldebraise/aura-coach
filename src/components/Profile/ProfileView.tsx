@@ -5,12 +5,8 @@ import {
   User, 
   MapPin, 
   Award, 
-  Settings, 
-  Plus, 
   ShieldCheck, 
-  RotateCcw,
-  Key,
-  Check
+  RotateCcw
 } from 'lucide-react';
 
 interface ProfileViewProps {
@@ -24,9 +20,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onUpdateProfile,
   onResetOnboarding
 }) => {
-  const [isEditingKey, setIsEditingKey] = useState<boolean>(false);
-  const [keyInput, setKeyInput] = useState<string>(profile.geminiApiKey || '');
-
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-200">
       {/* Profile Header */}
@@ -48,51 +41,36 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </span>
       </div>
 
-      {/* Google Account & Gemini AI Status */}
+      {/* Google Account & Gemini AI Engine Status (Zero API Key required) */}
       <div className="p-4 bg-zinc-900/40 border border-zinc-800/80 rounded-2xl">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <Key className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-semibold text-zinc-100">Compte Google & Clé Gemini</h3>
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-sm font-semibold text-zinc-100">Moteur IA Gemini & Compte</h3>
           </div>
-          <button
-            onClick={() => setIsEditingKey(!isEditingKey)}
-            className="text-xs text-emerald-400 hover:underline"
-          >
-            {isEditingKey ? 'Fermer' : 'Modifier'}
-          </button>
+          <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+            profile.isGoogleAuthenticated
+              ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
+              : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+          }`}>
+            {profile.isGoogleAuthenticated ? 'Gemini 2.5 Flash • Actif' : 'Session Locale'}
+          </span>
         </div>
 
-        {isEditingKey ? (
-          <div className="mt-3 space-y-2">
-            <input
-              type="password"
-              placeholder="Clé API Gemini (Google AI Studio)..."
-              value={keyInput}
-              onChange={(e) => setKeyInput(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500 font-mono"
-            />
-            <button
-              onClick={() => {
-                onUpdateProfile({
-                  ...profile,
-                  geminiApiKey: keyInput.trim(),
-                  isGoogleAuthenticated: true
-                });
-                setIsEditingKey(false);
-              }}
-              className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-semibold rounded-lg transition"
-            >
-              Enregistrer la clé
-            </button>
-          </div>
-        ) : (
-          <p className="text-xs text-zinc-400">
-            {profile.geminiApiKey
-              ? 'Clé Gemini active : les réponses et analyses personnalisées sont connectées à votre compte.'
-              : 'Mode heuristique actif. Ajoutez votre clé Gemini pour un raisonnement multimodal avancé.'}
-          </p>
-        )}
+        <div className="flex items-center gap-2 mt-2">
+          <span className={`w-2 h-2 rounded-full ${profile.isGoogleAuthenticated ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'}`} />
+          <span className="text-xs text-zinc-200 font-medium">
+            {profile.isGoogleAuthenticated
+              ? `Connecté en tant que ${profile.googleUser?.displayName || profile.googleUser?.email || profile.name}`
+              : 'Non connecté avec Google'}
+          </span>
+        </div>
+
+        <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+          {profile.isGoogleAuthenticated
+            ? 'Toutes les analyses et réponses du coach sont traitées directement via votre session Google. Aucune clé API manuelle n est requise.'
+            : 'Connectez votre compte Google pour débloquer les réponses interactives du conseiller scientifique.'}
+        </p>
       </div>
 
       {/* Configured Gym Locations */}
