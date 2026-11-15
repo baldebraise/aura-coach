@@ -5,7 +5,8 @@ import {
   WeeklyScheduleItem, 
   CompletedWorkoutLog, 
   DailyHabits,
-  GymLocation
+  GymLocation,
+  GoogleAuthUser
 } from './types';
 import { DEFAULT_GYMS } from './data/defaultGyms';
 import { generateDefaultSchedule } from './services/gemini';
@@ -18,6 +19,9 @@ import { ProfileView } from './components/Profile/ProfileView';
 import { OnboardingFlow } from './components/Onboarding/OnboardingFlow';
 import { GymPreWorkoutModal } from './components/LiveWorkoutPlayer/GymPreWorkoutModal';
 import { LiveWorkoutModal } from './components/LiveWorkoutPlayer/LiveWorkoutModal';
+import { AccountModal } from './components/Account/AccountModal';
+import { FirebaseConfigModal } from './components/Account/FirebaseConfigModal';
+import { ErrorAlertBanner, AppError } from './components/Common/ErrorAlertBanner';
 
 export const App: React.FC = () => {
   // Navigation State
@@ -25,6 +29,13 @@ export const App: React.FC = () => {
 
   // Screen state when not fully onboarded: 'welcome' | 'onboarding'
   const [authScreen, setAuthScreen] = useState<'welcome' | 'onboarding'>('welcome');
+
+  // Global Error Banner State
+  const [currentError, setCurrentError] = useState<AppError | null>(null);
+
+  // Modals State
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState<boolean>(false);
+  const [isFirebaseConfigOpen, setIsFirebaseConfigOpen] = useState<boolean>(false);
 
   // User Profile
   const [profile, setProfile] = useState<UserProfile | null>(() => {
@@ -117,25 +128,52 @@ export const App: React.FC = () => {
     localStorage.setItem('aura_daily_habits', JSON.stringify(dailyHabits));
   }, [dailyHabits]);
 
-  // Google Sign In trigger
-  const handleGoogleSignIn = () => {
+  // Google Sign In Success Handler
+  const handleGoogleSignInSuccess = (googleUser: GoogleAuthUser) => {
     if (profile && profile.onboardingCompleted) {
-      // Already has a profile, just connect Google
+      // Existing profile: update with google user
       setProfile({
         ...profile,
-        isGoogleAuthenticated: true
+        name: googleUser.displayName || profile.name,
+        isGoogleAuthenticated: true,
+        googleUser
       });
       setActiveTab('dashboard');
     } else {
-      // First time, proceed to onboarding with Google authenticated flag
+      // Create initial profile container with Google User data
+      const initialProfile: UserProfile = {
+        id: googleUser.uid,
+        name: googleUser.displayName || 'Athlète',
+        age: 28,
+        gender: 'male',
+        heightCm: 178,
+        weightKg: 75,
+        injuries: [],
+        activityLevel: 'moderate',
+        weeklyAvailabilityDays: 3,
+        preferredSessionDurationMinutes: 60,
+        primaryGoal: 'recomposition',
+        secondaryGoals: [],
+        baselineTests: [],
+        gyms: DEFAULT_GYMS,
+        isGoogleAuthenticated: true,
+        googleUser,
+        onboardingCompleted: false
+      };
+      setProfile(initialProfile);
       setAuthScreen('onboarding');
     }
   };
 
   // Handle Onboarding Completion
   const handleOnboardingComplete = (completedProfile: UserProfile) => {
-    const generatedSchedule = generateDefaultSchedule(completedProfile);
-    setProfile(completedProfile);
+    const mergedProfile: UserProfile = {
+      ...completedProfile,
+      googleUser: profile?.googleUser || null,
+      isGoogleAuthenticated: !!profile?.isGoogleAuthenticated
+    };
+    const generatedSchedule = generateDefaultSchedule(mergedProfile);
+    setProfile(mergedProfile);
     setSchedule(generatedSchedule);
     setActiveTab('dashboard');
   };
@@ -213,14 +251,33 @@ export const App: React.FC = () => {
   if (!profile || !profile.onboardingCompleted) {
     if (authScreen === 'welcome') {
       return (
-        <WelcomeScreen
-          onStartOnboarding={() => setAuthScreen('onboarding')}
-          onGoogleSignIn={handleGoogleSignIn}
-        />
+        <>
+          <ErrorAlertBanner
+            error={currentError}
+            onDismiss={() => setCurrentError(null)}
+          />
+          <WelcomeScreen
+            onStartOnboarding={() => setAuthScreen('onboarding')}
+            onGoogleSignInSuccess={handleGoogleSignInSuccess}
+            onError={(err) => setCurrentError({ id: 'err-' + Date.now(), ...err })}
+            onOpenFirebaseConfig={() => setIsFirebaseConfigOpen(true)}
+          />
+          <FirebaseConfigModal
+            isOpen={isFirebaseConfigOpen}
+            onClose={() => setIsFirebaseConfigOpen(false)}
+            onConfigSaved={() => {
+              setCurrentError(null);
+            }}
+          />
+        </>
       );
     }
     return (
       <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-center">
+        <ErrorAlertBanner
+          error={currentError}
+          onDismiss={() => setCurrentError(null)}
+        />
         <OnboardingFlow onComplete={handleOnboardingComplete} />
       </div>
     );
@@ -229,6 +286,12 @@ export const App: React.FC = () => {
   // 2. Active Application Dashboard & Tabs
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+      {/* Explicit Global Error Banner */}
+      <ErrorAlertBanner
+        error={currentError}
+        onDismiss={() => setCurrentError(null)}
+      />
+
       {/* Main Top Nav Bar */}
       <header className="sticky top-0 z-30 bg-zinc-950/90 border-b border-zinc-800/80 backdrop-blur-md px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -243,12 +306,34 @@ export const App: React.FC = () => {
           </span>
         </div>
 
-        <button
-          onClick={() => handleRequestStartSession()}
-          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-lg transition shadow-sm"
-        >
-          Séance
-        </button>
+        <div className="flex items-center gap-2.5">
+          {/* Quick Workout Button */}
+          <button
+            onClick={() => handleRequestStartSession()}
+            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-lg transition shadow-sm"
+          >
+            Séance
+          </button>
+
+          {/* User Photo Avatar / Account Menu Trigger */}
+          <button
+            onClick={() => setIsAccountModalOpen(true)}
+            className="w-8 h-8 rounded-full border-2 border-zinc-700 hover:border-emerald-500 overflow-hidden transition flex items-center justify-center bg-zinc-900"
+            title="Gérer mon compte"
+          >
+            {profile.googleUser?.photoURL ? (
+              <img
+                src={profile.googleUser.photoURL}
+                alt={profile.googleUser.displayName || 'Photo Google'}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-xs font-mono font-bold text-zinc-300">
+                {profile.name.charAt(0).toUpperCase()}
+              </span>
+            )}
+          </button>
+        </div>
       </header>
 
       {/* Main Container */}
@@ -331,6 +416,34 @@ export const App: React.FC = () => {
           />
         )}
       </main>
+
+      {/* Account Management Modal */}
+      <AccountModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        profile={profile}
+        onUpdateProfile={setProfile}
+        onLogout={() => {
+          setProfile({
+            ...profile,
+            isGoogleAuthenticated: false,
+            googleUser: null
+          });
+        }}
+        onShowFirebaseConfig={() => {
+          setIsAccountModalOpen(false);
+          setIsFirebaseConfigOpen(true);
+        }}
+      />
+
+      {/* Firebase Config Modal */}
+      <FirebaseConfigModal
+        isOpen={isFirebaseConfigOpen}
+        onClose={() => setIsFirebaseConfigOpen(false)}
+        onConfigSaved={() => {
+          setCurrentError(null);
+        }}
+      />
 
       {/* Pre-Workout Gym Selector Modal */}
       {pendingSessionToStart && (

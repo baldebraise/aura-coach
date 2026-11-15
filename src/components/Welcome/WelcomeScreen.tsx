@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Dumbbell, 
   Activity, 
@@ -6,34 +6,88 @@ import {
   Bot, 
   ArrowRight, 
   ShieldCheck, 
-  Sparkles,
-  Lock,
-  Music,
-  CheckCircle2
+  Download, 
+  Music, 
+  Smartphone, 
+  X,
+  AlertCircle
 } from 'lucide-react';
+import { loginWithGoogle } from '../../services/firebase';
+import { GoogleAuthUser } from '../../types';
 
 interface WelcomeScreenProps {
   onStartOnboarding: () => void;
-  onGoogleSignIn: () => void;
+  onGoogleSignInSuccess: (googleUser: GoogleAuthUser) => void;
+  onError: (error: { title: string; message: string; code?: string; actionText?: string; onAction?: () => void }) => void;
+  onOpenFirebaseConfig: () => void;
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onStartOnboarding,
-  onGoogleSignIn
+  onGoogleSignInSuccess,
+  onError,
+  onOpenFirebaseConfig
 }) => {
   const [isSigningIn, setIsSigningIn] = useState<boolean>(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallGuide, setShowInstallGuide] = useState<boolean>(false);
+  const [isStandalone, setIsStandalone] = useState<boolean>(false);
 
-  const handleGoogleClick = () => {
+  useEffect(() => {
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setIsStandalone(true);
+    }
+
+    const handleBeforeInstall = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      if (choice.outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    } else {
+      setShowInstallGuide(true);
+    }
+  };
+
+  const handleGoogleClick = async () => {
     setIsSigningIn(true);
-    // Trigger Google Sign-In flow
-    setTimeout(() => {
+    try {
+      const firebaseUser = await loginWithGoogle();
+      const googleUser: GoogleAuthUser = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName,
+        photoURL: firebaseUser.photoURL
+      };
+      onGoogleSignInSuccess(googleUser);
+    } catch (err: any) {
+      const message = err.message || "Échec lors de l'authentification avec Google.";
+      const isMissingConfig = message.includes('CONFIGURATION_MANQUANTE');
+
+      onError({
+        title: isMissingConfig ? 'Configuration Firebase Requise' : 'Erreur de Connexion Google',
+        message: message,
+        code: err.code || (isMissingConfig ? 'FIREBASE_NOT_CONFIGURED' : 'AUTH_ERROR'),
+        actionText: isMissingConfig ? 'Configurer Firebase maintenant' : undefined,
+        onAction: isMissingConfig ? onOpenFirebaseConfig : undefined
+      });
+    } finally {
       setIsSigningIn(false);
-      onGoogleSignIn();
-    }, 600);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-between px-5 py-8 max-w-md mx-auto select-none animate-in fade-in duration-300">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-between px-5 py-6 max-w-md mx-auto select-none animate-in fade-in duration-300">
       {/* Top Brand Tag */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -50,28 +104,33 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900/80 border border-zinc-800 rounded-lg text-[10px] font-mono text-zinc-400">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>v1.0 • PWA</span>
-        </div>
+        {!isStandalone && (
+          <button
+            onClick={handleInstallClick}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-emerald-900/80 hover:border-emerald-500 text-emerald-400 rounded-lg text-xs font-medium transition"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Installer l'app</span>
+          </button>
+        )}
       </div>
 
       {/* Hero Presentation */}
-      <div className="my-auto py-6 space-y-6">
+      <div className="my-auto py-4 space-y-5">
         <div>
           <span className="text-[11px] font-mono uppercase tracking-widest text-emerald-400 font-semibold block mb-2">
             Condition Physique & Performance
           </span>
-          <h1 className="text-3xl font-extrabold tracking-tight text-zinc-100 leading-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-100 leading-tight">
             Votre entraînement, calibré avec précision.
           </h1>
-          <p className="text-xs text-zinc-400 mt-2.5 leading-relaxed">
-            Évaluation initiale exhaustive, adaptation instantanée selon votre salle (Maison vs Club), lecteur musical intégré et coach agentique Gemini avec validation manuelle.
+          <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+            Évaluation initiale exhaustive, adaptation automatique selon votre salle (Maison vs Club), lecteur musical style Waze et coach IA avec validation manuelle.
           </p>
         </div>
 
-        {/* Feature Highlights Grid (Clean, zero emojis) */}
-        <div className="space-y-2.5">
+        {/* Feature Highlights Grid */}
+        <div className="space-y-2">
           <div className="p-3 bg-zinc-900/40 border border-zinc-800/80 rounded-xl flex items-start gap-3">
             <div className="p-2 rounded-lg bg-zinc-950 border border-zinc-800 text-emerald-400 shrink-0">
               <Activity className="w-4 h-4" />
@@ -79,7 +138,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             <div>
               <h2 className="text-xs font-semibold text-zinc-200">État des Lieux & Tests Guidés</h2>
               <p className="text-[11px] text-zinc-500 mt-0.5">
-                Benchmarks initiaux de force et d aérobie avec chronomètres intégrés.
+                Batterie de tests initiaux de force et d aérobie avec chronomètres intégrés.
               </p>
             </div>
           </div>
@@ -103,7 +162,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             <div>
               <h2 className="text-xs font-semibold text-zinc-200">Mode Séance & YouTube Music</h2>
               <p className="text-[11px] text-zinc-500 mt-0.5">
-                Vue plein écran étape par étape, widget musical style Waze et bips de repos.
+                Plein écran étape par étape, widget musical style Waze et bips de repos.
               </p>
             </div>
           </div>
@@ -115,7 +174,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             <div>
               <h2 className="text-xs font-semibold text-zinc-200">Conseiller IA Gemini avec Contrôle</h2>
               <p className="text-[11px] text-zinc-500 mt-0.5">
-                Recommandations concrètes activables en 1 clic sous votre validation.
+                Recommandations concrètes activables sous votre validation.
               </p>
             </div>
           </div>
@@ -123,14 +182,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       </div>
 
       {/* Action Buttons & Authentication */}
-      <div className="space-y-3 pt-4">
-        {/* Google Sign-In Button */}
+      <div className="space-y-2.5 pt-2">
+        {/* Real Google Sign-In Button */}
         <button
           onClick={handleGoogleClick}
           disabled={isSigningIn}
-          className="w-full py-3.5 px-4 bg-zinc-100 hover:bg-white active:scale-[0.99] text-zinc-950 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-3 shadow-lg shadow-zinc-950/50"
+          className="w-full py-3.5 px-4 bg-zinc-100 hover:bg-white active:scale-[0.99] text-zinc-950 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-3 shadow-lg shadow-zinc-950/50 disabled:opacity-50"
         >
-          {/* Official Google Vector Logo */}
           <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
             <path
               fill="#4285F4"
@@ -150,7 +208,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             />
           </svg>
           <span>
-            {isSigningIn ? 'Connexion en cours...' : 'Se connecter avec Google'}
+            {isSigningIn ? 'Authentification Google en cours...' : 'Se connecter avec Google'}
           </span>
         </button>
 
@@ -162,11 +220,53 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <span>Démarrer l'État des Lieux (Mode Invité)</span>
           <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
         </button>
-
-        <p className="text-[10px] text-zinc-600 text-center font-mono pt-1">
-          Données synchronisées en local et Cloud Firestore sécurisé.
-        </p>
       </div>
+
+      {/* Install Guide Modal */}
+      {showInstallGuide && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full sm:max-w-sm bg-zinc-950 border border-zinc-800 rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-sm font-bold text-zinc-100">Installer l'application</h3>
+              </div>
+              <button
+                onClick={() => setShowInstallGuide(false)}
+                className="p-1 text-zinc-500 hover:text-zinc-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl">
+                <span className="font-semibold text-zinc-200 block mb-1">Sur iPhone (Safari) :</span>
+                <ol className="list-decimal pl-4 space-y-1 text-zinc-400 text-[11px]">
+                  <li>Appuyez sur le bouton de <strong>Partage</strong> en bas de l'écran.</li>
+                  <li>Faites défiler et touchez <strong>« Sur l'écran d'accueil »</strong>.</li>
+                  <li>Appuyez sur <strong>Ajouter</strong> en haut à droite.</li>
+                </ol>
+              </div>
+
+              <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl">
+                <span className="font-semibold text-zinc-200 block mb-1">Sur Android (Chrome) :</span>
+                <ol className="list-decimal pl-4 space-y-1 text-zinc-400 text-[11px]">
+                  <li>Touchez les <strong>trois petits points (⋮)</strong> en haut à droite.</li>
+                  <li>Appuyez sur <strong>« Installer l'application »</strong>.</li>
+                </ol>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowInstallGuide(false)}
+              className="w-full mt-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl"
+            >
+              Compris
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -62,6 +62,13 @@ export interface PhysicalTestMetric {
   timerSeconds?: number;
 }
 
+export interface GoogleAuthUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -80,6 +87,7 @@ export interface UserProfile {
   gyms: GymLocation[];
   geminiApiKey?: string;
   isGoogleAuthenticated: boolean;
+  googleUser?: GoogleAuthUser | null;
   onboardingCompleted: boolean;
 }
 
