@@ -234,13 +234,23 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               )}
             </div>
 
-            <button
-              onClick={onEnterApp || onStartOnboarding}
-              className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-zinc-950 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
-            >
-              <span>Accéder à Mon Espace Athlète</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            {profile?.onboardingCompleted ? (
+              <button
+                onClick={onEnterApp || onStartOnboarding}
+                className="w-full py-3.5 px-4 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-zinc-950 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
+              >
+                <span>Accéder à Mon Espace Athlète</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={onStartOnboarding}
+                className="w-full py-3.5 px-4 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-zinc-950 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
+              >
+                <span>Initialiser mon Profil & Objectifs (3 min)</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
           </div>
         ) : (
           <>

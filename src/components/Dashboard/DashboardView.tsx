@@ -97,6 +97,7 @@ interface DashboardViewProps {
   onOpenAICoach: () => void;
   onOpenGuidedTest: (testId: TestDefinitionId) => void;
   onOpenGymConfig?: () => void;
+  onReconfigureProfile?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -108,7 +109,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onStartSession,
   onOpenAICoach,
   onOpenGuidedTest,
-  onOpenGymConfig
+  onOpenGymConfig,
+  onReconfigureProfile
 }) => {
   const [notificationGranted, setNotificationGranted] = useState<boolean>(false);
 
@@ -123,7 +125,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         session: undefined
       };
 
-  const userWeight = profile?.weightKg || 75;
+  const userWeight = profile?.weightKg;
 
   // Check if today's session has its required test passed
   const todaySession = todayScheduleItem.session;
@@ -133,25 +135,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     : true;
   const requiredTestDef = requiredTestId ? TEST_DEFINITIONS[requiredTestId] : null;
 
-  // Weight progression chart data
-  const weightData = [
-    { date: 'S-3', weight: userWeight + 1.2 },
-    { date: 'S-2', weight: userWeight + 0.8 },
-    { date: 'S-1', weight: userWeight + 0.3 },
-    { date: 'Aujourd hui', weight: dailyHabits?.weightKg || userWeight }
-  ];
+  // Weight progression chart data - ONLY genuine user inputs
+  const currentRecordedWeight = dailyHabits?.weightKg || userWeight;
+  const weightData = userWeight
+    ? [
+        { date: 'Initial', weight: userWeight },
+        ...(dailyHabits?.weightKg && dailyHabits.weightKg !== userWeight
+          ? [{ date: 'Aujourd hui', weight: dailyHabits.weightKg }]
+          : [])
+      ]
+    : [];
 
-  // Volume history data
+  // Volume history data - ONLY genuine logs
   const volumeData = (completedLogs && completedLogs.length > 0)
     ? completedLogs.map((log) => ({
         date: new Date(log.date).toLocaleDateString('fr-FR', { weekday: 'short' }),
         volume: Math.round(log.totalVolumeKg || 0)
       }))
-    : [
-        { date: 'Lun', volume: 3200 },
-        { date: 'Mer', volume: 4100 },
-        { date: 'Ven', volume: 3800 }
-      ];
+    : [];
+
+  const totalWeeklyVolume = (completedLogs && completedLogs.length > 0)
+    ? completedLogs.reduce((acc, l) => acc + (l.totalVolumeKg || 0), 0)
+    : 0;
 
   const handleRequestNotifications = async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -500,24 +505,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {dailyHabits.weightKg || profile.weightKg} kg
             </span>
           </div>
-          <div className="h-40 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={weightData}>
-                <XAxis dataKey="date" stroke="#52525b" fontSize={10} tickLine={false} />
-                <YAxis domain={['dataMin - 1', 'dataMax + 1']} stroke="#52525b" fontSize={10} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', fontSize: '11px' }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="weight"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  dot={{ fill: '#10b981', r: 3 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+
+          {weightData.length >= 2 ? (
+            <div className="h-40 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={weightData}>
+                  <XAxis dataKey="date" stroke="#52525b" fontSize={10} tickLine={false} />
+                  <YAxis domain={['dataMin - 1', 'dataMax + 1']} stroke="#52525b" fontSize={10} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', fontSize: '11px' }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="weight"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    dot={{ fill: '#10b981', r: 3 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-40 w-full flex flex-col items-center justify-center text-center p-4 bg-zinc-950/60 rounded-xl border border-zinc-800/60">
+              <TrendingUp className="w-5 h-5 text-zinc-600 mb-2" />
+              <p className="text-xs text-zinc-300 font-medium">Poids initial : {profile.weightKg} kg</p>
+              <p className="text-[11px] text-zinc-500 mt-1 max-w-xs">
+                Renseignez vos pesées dans le bloc Habitudes pour tracer votre courbe réelle dans le temps.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Volume Tonnage Evolution */}
@@ -528,23 +544,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Volume de Travail Hebdo (kg)
             </span>
             <span className="text-xs font-mono font-bold text-amber-400">
-              {completedLogs.reduce((acc, l) => acc + l.totalVolumeKg, 0) || 11100} kg
+              {totalWeeklyVolume} kg
             </span>
           </div>
-          <div className="h-40 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={volumeData}>
-                <XAxis dataKey="date" stroke="#52525b" fontSize={10} tickLine={false} />
-                <YAxis stroke="#52525b" fontSize={10} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', fontSize: '11px' }}
-                />
-                <Bar dataKey="volume" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+
+          {volumeData.length > 0 ? (
+            <div className="h-40 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={volumeData}>
+                  <XAxis dataKey="date" stroke="#52525b" fontSize={10} tickLine={false} />
+                  <YAxis stroke="#52525b" fontSize={10} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', fontSize: '11px' }}
+                  />
+                  <Bar dataKey="volume" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-40 w-full flex flex-col items-center justify-center text-center p-4 bg-zinc-950/60 rounded-xl border border-zinc-800/60">
+              <Flame className="w-5 h-5 text-zinc-600 mb-2" />
+              <p className="text-xs text-zinc-300 font-medium">0 séance terminée cette semaine</p>
+              <p className="text-[11px] text-zinc-500 mt-1 max-w-xs">
+                Votre tonnage réel (charges x répétitions) s'affichera ici dès la validation de votre premier entraînement.
+              </p>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Reconfigure Profile Quick Access */}
+      {onReconfigureProfile && (
+        <div className="p-4 bg-zinc-900/30 border border-zinc-800/80 rounded-2xl flex items-center justify-between">
+          <div>
+            <h4 className="text-xs font-semibold text-zinc-200">Reconfigurer mon profil & objectifs</h4>
+            <p className="text-[11px] text-zinc-500">Repasser le questionnaire initial complet (âge, poids réel, matériel, fréquence)</p>
+          </div>
+          <button
+            onClick={onReconfigureProfile}
+            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl transition"
+          >
+            Reconfigurer
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -252,13 +252,15 @@ export const App: React.FC = () => {
   const handleGoogleSignInSuccess = (googleUser: GoogleAuthUser) => {
     sounds.playRecordBeaten();
     const existing = profile;
+    const isAlreadyOnboarded = !!existing?.onboardingCompleted;
+
     const initialProfile: UserProfile = {
       id: googleUser.uid,
       name: googleUser.displayName || existing?.name || 'Athlète',
-      age: existing?.age || 28,
+      age: existing?.age || 25,
       gender: existing?.gender || 'male',
-      heightCm: existing?.heightCm || 178,
-      weightKg: existing?.weightKg || 75,
+      heightCm: existing?.heightCm || 175,
+      weightKg: existing?.weightKg || 70,
       injuries: existing?.injuries || [],
       activityLevel: existing?.activityLevel || 'moderate',
       weeklyAvailabilityDays: existing?.weeklyAvailabilityDays || 3,
@@ -269,20 +271,26 @@ export const App: React.FC = () => {
       gyms: existing?.gyms || DEFAULT_GYMS,
       isGoogleAuthenticated: true,
       googleUser,
-      onboardingCompleted: true
+      onboardingCompleted: isAlreadyOnboarded
     };
+
     setProfile(initialProfile);
-    if (!schedule || schedule.length === 0) {
-      setSchedule(generateDefaultSchedule(initialProfile));
-    }
-    setActiveTab('dashboard');
+
     setAuthSuccessToast({
-      message: `Connecté avec Google : ${googleUser.displayName || googleUser.email}`,
+      message: `Compte Google connecté : ${googleUser.displayName || googleUser.email}`,
       photoURL: googleUser.photoURL,
       displayName: googleUser.displayName
     });
-    // Immediately open the Account modal so the user sees their photo, email, sync, and settings!
-    setIsAccountModalOpen(true);
+
+    if (isAlreadyOnboarded) {
+      if (!schedule || schedule.length === 0) {
+        setSchedule(generateDefaultSchedule(initialProfile));
+      }
+      setActiveTab('dashboard');
+    } else {
+      // Guide the user directly to the initial athletic questionnaire (objectives, metrics, gym)
+      setAuthScreen('onboarding');
+    }
   };
 
   // Handle Onboarding Completion
@@ -646,6 +654,15 @@ export const App: React.FC = () => {
             onOpenAICoach={() => navigateToTab('ai')}
             onOpenGuidedTest={(testId) => setActiveTestModal(testId)}
             onOpenGymConfig={() => setIsGymModalDirectOpen(true)}
+            onReconfigureProfile={() => {
+              if (profile) {
+                setProfile({
+                  ...profile,
+                  onboardingCompleted: false
+                });
+              }
+              setAuthScreen('onboarding');
+            }}
           />
         )}
 

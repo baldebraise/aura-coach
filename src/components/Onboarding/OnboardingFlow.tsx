@@ -92,40 +92,32 @@ export const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete }) =>
 
     const baselineTests: PhysicalTestMetric[] = [
       {
-        id: 'pushups',
-        name: 'Max Pompes Propres',
+        id: 'test-upper',
+        name: 'Test Force Haut (Pompes)',
         category: 'strength',
         unit: 'reps',
         value: parseInt(pushupsCount) || 0,
         instructions: 'Nombre maximum de répétitions complètes sans pause'
       },
       {
-        id: 'plank',
-        name: 'Gainage Planche Ventrale',
+        id: 'test-core',
+        name: 'Test Gainage (Planche)',
         category: 'strength',
         unit: 'secondes',
         value: plankSeconds,
         instructions: 'Maintien rigide en appui sur les avant-bras'
       },
       {
-        id: 'wall_sit',
-        name: 'Chaise Murale Isométrique',
+        id: 'test-lower',
+        name: 'Test Force Bas (Chaise)',
         category: 'strength',
         unit: 'secondes',
         value: wallSitSeconds,
         instructions: 'Dos au mur, cuisses à 90 degrés'
       },
       {
-        id: 'rhr',
-        name: 'Pouls au Repos',
-        category: 'cardio',
-        unit: 'BPM',
-        value: parseInt(restingHeartRate) || 65,
-        instructions: 'Mesuré au réveil le matin'
-      },
-      {
-        id: 'vma',
-        name: 'Vitesse Maximale Aérobie (VMA)',
+        id: 'test-cardio',
+        name: 'Test Cardio (VMA)',
         category: 'cardio',
         unit: 'km/h',
         value: parseFloat(vmaEstimated) || 12,
