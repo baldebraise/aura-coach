@@ -229,219 +229,254 @@ async function generateDeepSportsScientistDossier(
   currentProfile: UserProfile,
   previousDossier?: AgenticAthleticDossier
 ): Promise<AgenticTurnResult> {
-  // Realistic pacing so the user experiences authentic analysis delay (1.1s)
-  await new Promise((resolve) => setTimeout(resolve, 1100));
+  // Pacing so the user perceives authentic analysis
+  await new Promise((resolve) => setTimeout(resolve, 900));
 
   const userMessages = dialogueHistory.filter((m) => m.role === 'user');
+  const assistantMessages = dialogueHistory.filter((m) => m.role === 'assistant');
   const turnsCount = userMessages.length;
   const latestUserText = userMessages[userMessages.length - 1]?.text || '';
   const latestLower = latestUserText.toLowerCase();
 
   const allUserText = userMessages.map((m) => m.text).join(' ');
-  const lower = allUserText.toLowerCase();
-  const isFinishingRequested = /(?:fini|terminer|valid|prêt|c'est bon|générer|tout dit)/i.test(lower);
+  const allLower = allUserText.toLowerCase();
+  const allAssistantText = assistantMessages.map((m) => m.text).join(' ').toLowerCase();
 
-  // 1. Entity Extraction: Name
+  const isFinishingRequested = /(?:fini|terminer|valid|prêt|c'est bon|générer|tout dit|arrete|arrête|stop)/i.test(latestLower);
+
+  // --- 1. ENTITY EXTRACTION ACROSS ENTIRE DIALOGUE ---
+  // Name
   let userName = '';
-  const nameMatch = allUserText.match(/(?:je m'appelle|moi c'est|moi c|mon prénom c'est|appelle-moi)\s+([A-ZÀ-Ÿa-zà-ÿ-]+)/i) || 
+  const nameMatch = allUserText.match(/(?:je m'appelle|moi c'est|moi c|mon prénom c'est|appelle-moi|suis)\s+([A-ZÀ-Ÿa-zà-ÿ-]+)/i) ||
     (turnsCount <= 2 ? latestUserText.match(/^([A-ZÀ-Ÿ][a-zà-ÿ-]+)\b/) : null);
-  if (nameMatch) {
+  if (nameMatch && !['oui', 'non', 'salut', 'bonjour', 'merci', 'ok', 'yo', 'hello'].includes(nameMatch[1].toLowerCase())) {
     userName = nameMatch[1];
   }
 
-  // 2. Entity Extraction: Goals & Target Muscle Groups
-  const isChest = /(?:pecs|pectoraux|poitrine)/i.test(lower);
-  const isArms = /(?:bras|biceps|triceps)/i.test(lower);
-  const isBack = /(?:dos|dorsaux|trapèzes|v-taper|largeur)/i.test(lower);
-  const isShoulders = /(?:épaules|epaule|deltoïdes|carrure)/i.test(lower);
-  const isLegs = /(?:jambes|cuisses|fessiers|quadriceps|mollets)/i.test(lower);
-  const isBelly = /(?:ventre|abdos|taille|poignées d'amour|gras du ventre)/i.test(lower);
-  
-  const isFatLoss = /(?:perdre du poids|kilos|sécher|seche|maigrir|mincir|gras|ventre)/i.test(lower);
-  const isHypertrophy = /(?:masse|muscle|grossir|volume|carrure|prendre)/i.test(lower) || isChest || isArms || isBack;
-  const isStrength = /(?:force|lourd|puissance|performer|charges|1rm)/i.test(lower);
-  const isCardio = /(?:courir|cardio|endurance|souffle|vélo|semi|marathon)/i.test(lower);
-  const isPosture = /(?:posture|mal de dos|lombaire|souplesse|santé|redresser)/i.test(lower);
+  // Goals
+  const isChest = /(?:pecs?|pectoraux|poitrine|développé)/i.test(allLower);
+  const isArms = /(?:bras|biceps|triceps)/i.test(allLower);
+  const isBack = /(?:dos|dorsaux|trapèzes|v-taper|largeur)/i.test(allLower);
+  const isShoulders = /(?:épaules?|deltoïdes|carrure)/i.test(allLower);
+  const isLegs = /(?:jambes?|cuisses?|fessiers?|quadriceps|mollets|squat)/i.test(allLower);
+  const isBelly = /(?:ventre|abdos?|taille|poignées d'amour|gras du ventre|abdominaux)/i.test(allLower);
 
-  // 3. Entity Extraction: Sports Background & Experience
+  const isFatLoss = /(?:perdre du poids|kilos|sécher|seche|sèche|maigrir|mincir|gras|ventre|perte de poids|brûler)/i.test(allLower);
+  const isHypertrophy = /(?:masse|muscle|grossir|volume|carrure|prendre du muscle|hypertrophie|muscler)/i.test(allLower) || isChest || isArms || isBack;
+  const isStrength = /(?:force|lourd|puissance|performer|charges|1rm|force athlétique)/i.test(allLower);
+  const isCardio = /(?:courir|cardio|endurance|souffle|vélo|semi|marathon|vma|course)/i.test(allLower);
+  const isPosture = /(?:posture|mal de dos|lombaire|souplesse|santé|redresser|mobilité|dos droit)/i.test(allLower);
+
+  // Sports & Experience
   const pastSports: string[] = [];
-  if (lower.includes('basket')) pastSports.push('basketball');
-  if (lower.includes('foot')) pastSports.push('football');
-  if (lower.includes('vélo') || lower.includes('cyclisme')) pastSports.push('cyclisme');
-  if (lower.includes('course') || lower.includes('running')) pastSports.push('course à pied');
-  if (lower.includes('natation')) pastSports.push('natation');
-  if (lower.includes('crossfit')) pastSports.push('CrossFit');
-  if (lower.includes('escalade')) pastSports.push('escalade');
-  if (lower.includes('boxe') || lower.includes('judo') || lower.includes('combat')) pastSports.push('sports de combat');
-  if (lower.includes('tennis')) pastSports.push('tennis');
-  if (lower.includes('muscu')) pastSports.push('musculation');
+  if (allLower.includes('basket')) pastSports.push('basketball');
+  if (allLower.includes('foot')) pastSports.push('football');
+  if (allLower.includes('vélo') || allLower.includes('cyclisme')) pastSports.push('cyclisme');
+  if (allLower.includes('course') || allLower.includes('running')) pastSports.push('course à pied');
+  if (allLower.includes('natation') || allLower.includes('nage')) pastSports.push('natation');
+  if (allLower.includes('crossfit')) pastSports.push('CrossFit');
+  if (allLower.includes('escalade') || allLower.includes('grimpe')) pastSports.push('escalade');
+  if (allLower.includes('boxe') || allLower.includes('judo') || allLower.includes('combat') || allLower.includes('mma') || allLower.includes('arts martiaux')) pastSports.push('sports de combat');
+  if (allLower.includes('tennis') || allLower.includes('padel') || allLower.includes('badminton')) pastSports.push('sports de raquette');
+  if (allLower.includes('rugby') || allLower.includes('hand')) pastSports.push('sports collectifs');
+  if (allLower.includes('muscu') || allLower.includes('musculation') || allLower.includes('fonte') || allLower.includes('fitness')) pastSports.push('musculation');
 
-  const isBeginner = /(?:débutant|jamais fait|commence|découvre|première fois)/i.test(lower);
-  const isResuming = /(?:reprise|arrêté|pause|coupure|reprends|plusieurs années sans)/i.test(lower);
+  const isBeginner = /(?:débutant|jamais fait|commence|découvre|première fois|novice|zéro expérience)/i.test(allLower);
+  const isResuming = /(?:reprise|arrêté|pause|coupure|reprends|plusieurs années sans|reprendre)/i.test(allLower);
+  const hasExpYears = allLower.match(/(\d+)\s*(?:ans?|années?)\s*(?:de muscu|d'expérience|de pratique)/i);
 
-  // 4. Entity Extraction: Profession & Lifestyle
-  const isJobDesk = /(?:bureau|ordinateur|écran|assis|télétravail|comptable|dev|développeur|secrétaire|commercial|voiture)/i.test(lower);
-  const isJobPhysical = /(?:debout|chantier|bâtiment|infirmier|serveur|manutention|artisan|physique|restauration)/i.test(lower);
-  const isSleepIssue = /(?:mal dormi|insomnie|fatigué|fatigue|court|réveils|dors peu)/i.test(lower);
+  // Profession & Lifestyle
+  const isJobDesk = /(?:bureau|ordinateur|écran|assis|télétravail|comptable|dev|développeur|secrétaire|commercial|voiture|conducteur|informatique|ingénieur|étudiant)/i.test(allLower);
+  const isJobPhysical = /(?:debout|chantier|bâtiment|infirmi|serveur|manutention|artisan|physique|restauration|pompier|militaire|magasin|vendeur|ouvrier|marche beaucoup)/i.test(allLower);
+  const isSleepMentioned = /(?:sommeil|dors|dormir|nuit|réveil|heures de sommeil|insomnie|fatigue)/i.test(allLower);
+  const sleepHoursMatch = allLower.match(/(\d{1,2})\s*(?:h|heures?)\s*(?:de sommeil|par nuit)?/i);
+  const sleepHours = sleepHoursMatch ? parseInt(sleepHoursMatch[1]) : undefined;
 
-  // 5. Entity Extraction: Availability & Equipment
-  let daysPerWeek = 4;
-  const daysMatch = lower.match(/(\d+)\s*(?:séances?|fois|jours?)\b/i);
+  // Nutrition & Hydration
+  const isNutritionMentioned = /(?:mange|repas|nutrition|aliment|protéines?|calories?|eau|boire|litres?|cuisine|resto|fast-food|grignot)/i.test(allLower);
+  const waterLitersMatch = allLower.match(/(\d(?:[.,]\d)?)\s*(?:l|litres?)\s*(?:d'eau|par jour)?/i);
+
+  // Schedule & Availability
+  let daysPerWeek = previousDossier?.trainingPlanDraft.options[0]?.frequencyDays || 3;
+  const daysMatch = allLower.match(/(\d)\s*(?:séances?|fois|jours?)\b/i);
   if (daysMatch) {
     daysPerWeek = Math.min(6, Math.max(2, parseInt(daysMatch[1])));
-  } else if (lower.includes('3 fois') || lower.includes('3 séances') || lower.includes('3j')) {
+  } else if (allLower.includes('trois fois') || allLower.includes('3j')) {
     daysPerWeek = 3;
-  } else if (lower.includes('5 fois') || lower.includes('5 séances') || lower.includes('5j')) {
+  } else if (allLower.includes('quatre fois') || allLower.includes('4j')) {
+    daysPerWeek = 4;
+  } else if (allLower.includes('cinq fois') || allLower.includes('5j')) {
     daysPerWeek = 5;
   }
 
-  const isHomeGym = /(?:maison|chez moi|haltères|banc|barre de traction|élastiques|kettlebell)/i.test(lower);
-  const isCommercialGym = /(?:salle|basic-fit|basic fit|fitness park|on air|salle de sport)/i.test(lower);
+  const isHomeGym = /(?:maison|chez moi|haltères|banc|barre de traction|élastiques|kettlebell|appartement|salon)/i.test(allLower);
+  const isCommercialGym = /(?:salle|basic-fit|basic fit|fitness park|on air|salle de sport|machines?|poulies?)/i.test(allLower);
 
-  // 6. Entity Extraction: Sensitive Joints
+  // Injuries & Sensitive Joints
   const injuries: string[] = [];
-  if (lower.includes('genou')) injuries.push('Genoux (rotule/ménisque)');
-  if (lower.includes('épaule') || lower.includes('epaule')) injuries.push('Épaules (coiffe des rotateurs)');
-  if (lower.includes('dos') || lower.includes('lombaire')) injuries.push('Lombaires & bas du dos');
-  if (lower.includes('poignet')) injuries.push('Poignets');
-  if (lower.includes('coude')) injuries.push('Coudes (tendinopathie)');
+  if (allLower.includes('genou')) injuries.push('Genoux (rotule/ménisque)');
+  if (allLower.includes('épaule') || allLower.includes('epaule')) injuries.push('Épaules (coiffe des rotateurs/conflit)');
+  if (allLower.includes('dos') || allLower.includes('lombaire') || allLower.includes('hernie') || allLower.includes('sciatique')) injuries.push('Lombaires & colonne');
+  if (allLower.includes('poignet')) injuries.push('Poignets');
+  if (allLower.includes('coude')) injuries.push('Coudes (tendinopathie)');
+  if (allLower.includes('hanche')) injuries.push('Hanches');
+  if (allLower.includes('nuque') || allLower.includes('cervicale')) injuries.push('Cervicales');
 
-  // 7. Physical Stats
+  // Physical Stats
   let age = previousDossier?.baselineTrackingMetrics.initialAge || currentProfile.age;
-  const ageMatch = lower.match(/(?:j'ai|age|âgé de|age de)?\s*(\d{2})\s*(?:ans|an)\b/i) || lower.match(/\b(\d{2})\s*ans\b/i);
+  const ageMatch = allLower.match(/(?:j'ai|age|âgé de|age de)?\s*(\d{2})\s*(?:ans|an)\b/i) || allLower.match(/\b(\d{2})\s*ans\b/i);
   if (ageMatch) age = parseInt(ageMatch[1]);
 
   let weight = previousDossier?.baselineTrackingMetrics.initialWeightKg || currentProfile.weightKg;
-  const weightMatch = lower.match(/(?:pèse|poids|fais)?\s*(\d{2,3}(?:[.,]\d)?)\s*(?:kg|kilos|kilo)\b/i);
+  const weightMatch = allLower.match(/(?:pèse|poids|fais)?\s*(\d{2,3}(?:[.,]\d)?)\s*(?:kg|kilos|kilo)\b/i);
   if (weightMatch) weight = parseFloat(weightMatch[1].replace(',', '.'));
 
   let height = previousDossier?.baselineTrackingMetrics.initialHeightCm || currentProfile.heightCm;
-  const heightMetersMatch = lower.match(/\b(1)[m,.](\d{2})\b/i);
-  let heightCmMatch = false;
+  const heightMetersMatch = allLower.match(/\b(1)[m,.](\d{2})\b/i);
   if (heightMetersMatch) {
     height = 100 + parseInt(heightMetersMatch[2]);
   } else {
-    const cmMatch = lower.match(/\b(1[4-9]\d|2[0-1]\d)\s*(?:cm)?\b/);
-    if (cmMatch && lower.includes('cm')) {
+    const cmMatch = allLower.match(/\b(1[4-9]\d|2[0-1]\d)\s*(?:cm)?\b/);
+    if (cmMatch && allLower.includes('cm')) {
       height = parseInt(cmMatch[1]);
-      heightCmMatch = true;
     }
   }
 
-  // Dimension coverage flags
-  const hasGoalDimension = isHypertrophy || isFatLoss || isStrength || isCardio || isPosture;
-  const hasHistoryDimension = pastSports.length > 0 || isBeginner || isResuming;
-  const hasLifestyleDimension = isJobDesk || isJobPhysical || isSleepIssue;
-  const hasAvailabilityDimension = !!daysMatch || isHomeGym || isCommercialGym;
-  const hasHealthStatsDimension = injuries.length > 0 || !!ageMatch || !!weightMatch || !!heightMetersMatch;
+  // --- 2. PILLAR COVERAGE TRACKER ---
+  const pillarGoalDone = isHypertrophy || isFatLoss || isStrength || isCardio || isPosture;
+  const pillarExpDone = pastSports.length > 0 || isBeginner || isResuming || !!hasExpYears;
+  const pillarLifestyleDone = isJobDesk || isJobPhysical || isSleepMentioned;
+  const pillarNutritionDone = isNutritionMentioned;
+  const pillarLogisticsDone = !!daysMatch || isHomeGym || isCommercialGym;
+  const pillarHealthDone = injuries.length > 0 || !!age || !!weight || !!height;
 
-  const isComplete = turnsCount >= 4 || isFinishingRequested || 
-    (hasGoalDimension && hasHistoryDimension && hasLifestyleDimension && hasAvailabilityDimension && hasHealthStatsDimension);
+  const totalPillarsDone = [
+    pillarGoalDone,
+    pillarExpDone,
+    pillarLifestyleDone,
+    pillarNutritionDone,
+    pillarLogisticsDone,
+    pillarHealthDone
+  ].filter(Boolean).length;
 
-  // BUILD THE DEEP THOROUGH REFLECTION (Multi-paragraph sports science analysis)
-  const paragraphs: string[] = [];
+  const isComplete = turnsCount >= 5 || isFinishingRequested || (totalPillarsDone >= 4 && turnsCount >= 3);
 
-  // Salutation & Personalized Receipt
-  const greeting = userName ? `Enchanté ${userName} ! ` : '';
+  // --- 3. DYNAMIC TURN-BY-TURN DIRECT FEEDBACK (Never repeat static text) ---
+  const feedbackParagraphs: string[] = [];
 
-  // Paragraph 1: Biomechanical & Metabolic Analysis of the Objective
-  if (isFatLoss && isHypertrophy) {
-    paragraphs.push(
-      `${greeting}Viser la perte de masse grasse (notamment abdominale) tout en développant la masse musculaire relève de la recomposition corporelle avancée. D'un point de vue physiologique, le piège classique serait d'augmenter démesurément le cardio en réduisant drastiquement les calories, ce qui provoquerait une protéolyse (perte de muscle) et une baisse du métabolisme de base. Au contraire, notre protocole va imposer une tension mécanique lourde et stricte en musculation pour forcer ton système neuro-endocrinien à sanctuariser chaque gramme de muscle, pendant qu'un déficit calorique léger et maîtrisé mobilisera les triglycérides stockés.`
-    );
-  } else if (isFatLoss) {
-    paragraphs.push(
-      `${greeting}Ton cap d'amincissement et de perte de masse grasse est une excellente démarche. En physiologie de l'exercice, la préservation de la masse maigre est le facteur clé pour maintenir un métabolisme basal élevé et éviter l'effet rebond. Nous allons instaurer un déficit énergétique modéré (environ 300 kcal sous ta dépense journalière) combiné à un entraînement en résistance qui envoie le signal anabolique indispensable à la rétention musculaire.`
-    );
-  } else if (isHypertrophy) {
-    const muscleList: string[] = [];
-    if (isChest) muscleList.push('pectoraux');
-    if (isArms) muscleList.push('bras');
-    if (isBack) muscleList.push('dos');
-    if (isShoulders) muscleList.push('épaules');
-    if (isLegs) muscleList.push('jambes');
-    const muscleTargetStr = muscleList.length > 0 ? ` (notamment ${muscleList.join(', ')})` : '';
+  // Acknowledge user's latest specific response directly:
+  const latestFeedbackParts: string[] = [];
 
-    paragraphs.push(
-      `${greeting}Ton objectif d'hypertrophie musculaire${muscleTargetStr} exige une approche rigoureusement étalonnée. Pour déclencher une croissance myofibrillaire durable, le facteur déterminant n'est pas la fatigue superficielle, mais la tension mécanique appliquée aux unités motrices à seuil d'activation élevé. Cela se traduit par un travail dans une zone de 6 à 12 répétitions, à 1 ou 2 répétitions de l'échec postural (RIR 1-2), en insistant sur une phase excentrique contrôlée de 2 à 3 secondes qui maximise le recrutement des fibres rapides.`
-    );
-  } else if (isStrength) {
-    paragraphs.push(
-      `${greeting}Le développement de la force athlétique repose avant tout sur l'adaptation neurale : synchronisation des motoneurones, fréquence de décharge et réduction des co-contractions antagonistes. Nous structurerons tes blocs de travail autour de mouvements polyarticulaires fondamentaux à intensité élevée (75 à 85% du 1RM) avec des temps de récupération complets (2 min 30 à 3 min) pour assurer la resynthèse complète de l'ATP phosphocréatine.`
-    );
-  } else {
-    paragraphs.push(
-      `${greeting}Ta volonté de reprendre le contrôle de ta forme physique et de bâtir une condition athlétique solide est une excellente initiative. Pour qu'une transformation s'inscrive dans la durée sans rechute, nous allons allier un travail de posture, de force fonctionnelle et de conditionnement métabolique progressif.`
+  if (userName && turnsCount <= 2 && !allAssistantText.includes(userName.toLowerCase())) {
+    latestFeedbackParts.push(`Ravi de faire ta connaissance, ${userName}.`);
+  }
+
+  // Reaction to stats if in latest input
+  if (weightMatch || heightMetersMatch || ageMatch) {
+    const statSummary = `${weight ? `${weight} kg` : ''}${height ? ` pour ${height} cm` : ''}${age ? ` (${age} ans)` : ''}`;
+    latestFeedbackParts.push(
+      `Bien reçu pour ton gabarit de départ : ${statSummary}. En physiologie athlétique, ces données sont cruciales pour calculer ta charge relative (ratio force/poids de corps) et calibrer ta dépense énergétique basale.`
     );
   }
 
-  // Paragraph 2: Integration of Lifestyle, Daily Job, Sleep & Joints
-  const contextualInsights: string[] = [];
-
-  if (pastSports.length > 0) {
-    contextualInsights.push(
-      `Ton expérience passée en ${pastSports.join(' et ')} te confère un capital moteur précieux : ta mémoire neuromusculaire et ta proprioception permettront d'assimiler les schémas moteurs beaucoup plus vite qu'un novice complet.`
-    );
-  } else if (isBeginner) {
-    contextualInsights.push(
-      `Débuter la musculation est une opportunité formidable : tes gains initiaux (l'adaptation neuromusculaire des premières semaines) seront particulièrement rapides et gratifiants dès lors que la technique d'exécution est irréprochable.`
+  // Reaction to injuries if in latest input
+  if (injuries.length > 0 && !allAssistantText.includes('sensibilité') && !allAssistantText.includes('vigilance articulaire')) {
+    latestFeedbackParts.push(
+      `J'enregistre immédiatement tes sensibilités (${injuries.join(', ')}). Notre ligne de conduite sera intransigeante : zéro compromis articulaire. Nous allons proscrire les angles fermés et les cisaillements axiaux, et privilégier des trajectoires convergentes et des prises neutres qui renforcent les muscles stabilisateurs sans jamais agresser les capsules articulaires.`
     );
   }
 
-  if (isJobDesk) {
-    contextualInsights.push(
-      `Travailler assis devant écran crée inévitablement un raccourcissement des fléchisseurs de hanche (psoas) et un enroulement des épaules vers l'avant. Notre programmation compensera directement cela en intégrant systématiquement des mouvements d'ouverture scapulaire (Face Pull, tirages horizontaux) et d'extension de hanche pour décompresser tes lombaires.`
+  // Reaction to job / lifestyle if in latest input
+  if ((isJobDesk || isJobPhysical) && !allAssistantText.includes('fléchisseurs de hanche') && !allAssistantText.includes('dépense physique et ta fatigue')) {
+    if (isJobDesk) {
+      latestFeedbackParts.push(
+        `Ton activité assise au bureau est un élément biomécanique déterminant : la position assise prolongée verrouille les fléchisseurs de hanche (psoas) et désactive la chaîne postérieure. Tes échauffements et tes exercices intégreront une ouverture de hanche et une rétraction scapulaire pour contrer directement cette posture d'écran.`
+      );
+    } else {
+      latestFeedbackParts.push(
+        `Avec un travail physique et actif, ta dépense calorique quotidienne (NEAT) est déjà élevée. Nous devons calibrer un volume d'entraînement dense mais économe en fatigue nerveuse (45 à 55 min max), pour stimuler l'hypertrophie sans basculer dans le surmenage neuromusculaire.`
+      );
+    }
+  }
+
+  // Reaction to sports experience if in latest input
+  if (pastSports.length > 0 && !allAssistantText.includes('capital moteur') && !allAssistantText.includes(pastSports[0])) {
+    latestFeedbackParts.push(
+      `Ton expérience en ${pastSports.join(' et ')} est un accélérateur formidable : le recrutement neuromusculaire et la coordination inter-musculaire que tu as déjà développés vont te permettre de progresser bien plus vite qu'un profil n'ayant jamais pratiqué.`
     );
-  } else if (isJobPhysical) {
-    contextualInsights.push(
-      `Avec un quotidien professionnel actif et debout, ta dépense physique et ta fatigue articulaire sont déjà substantielles. Nos séances seront denses (45 à 55 min max) et ciblées, en supprimant tout volume poubelle pour préserver tes capacités de récupération.`
+  } else if (isBeginner && !allAssistantText.includes('débuter la musculation')) {
+    latestFeedbackParts.push(
+      `Débuter la musculation est une période bénie : la courbe d'adaptation neurale des 8 premières semaines offre des gains de tonicité spectaculaires dès que l'exécution technique est propre.`
     );
   }
 
-  if (injuries.length > 0) {
-    contextualInsights.push(
-      `Concernant tes sensibilités déclarées (${injuries.join(', ')}), nous allons verrouiller chaque trajectoire : pas de charges axiales compressives ou de rotations à risque, mais des variantes stables en prise neutre et du travail unilatéral qui renforcent les stabilisateurs sans déclencher d'inflammation.`
+  // Reaction to gym equipment / schedule if in latest input
+  if ((isHomeGym || isCommercialGym || daysMatch) && !allAssistantText.includes('répartition de')) {
+    if (isHomeGym) {
+      latestFeedbackParts.push(
+        `S'entraîner à domicile avec haltères offre une liberté totale de trajectoire, souvent plus respectueuse de la morphologie articulaire que les machines guidées rigides.`
+      );
+    } else if (isCommercialGym) {
+      latestFeedbackParts.push(
+        `En salle de sport, nous pourrons exploiter des profils de résistance complets (poulies à tension continue, barres libres et bancs inclinables) pour surcharger chaque portion musculaire avec précision.`
+      );
+    }
+  }
+
+  // Reaction to nutrition / sleep if in latest input
+  if (isSleepMentioned && !allAssistantText.includes('sommeil')) {
+    latestFeedbackParts.push(
+      `Ton sommeil est le pivot de ta récupération : 95% de la libération de l'hormone de croissance et de la resynthèse du glycogène s'opèrent durant les phases de sommeil profond. Nous adapterons les séances pour réguler ton rythme circadien.`
     );
   }
 
-  if (isHomeGym) {
-    contextualInsights.push(
-      `S'entraîner à domicile avec haltères permet une intensité remarquable : la liberté de trajectoire des haltères est même souvent supérieure aux barres guidées pour l'activation musculaire et le confort articulaire.`
-    );
+  // If latest input was very short or didn't trigger new domain, formulate conversational bridge
+  if (latestFeedbackParts.length === 0) {
+    if (turnsCount === 1) {
+      latestFeedbackParts.push(
+        `C'est une excellente base de départ. Pour bâtir une programmation qui fonctionne réellement dans la durée, nous allons concevoir un protocole individualisé en analysant tes capacités motrices, tes contraintes et ton quotidien.`
+      );
+    } else {
+      latestFeedbackParts.push(
+        `Très bien, c'est parfaitement noté et intégré à ton profil.`
+      );
+    }
   }
 
-  if (contextualInsights.length > 0) {
-    paragraphs.push(contextualInsights.join(' '));
-  }
+  feedbackParagraphs.push(latestFeedbackParts.join(' '));
 
-  // Paragraph 3: Transition & Single Next Question OR Finalization
+  // --- 4. DETERMINE THE SINGLE NEXT BEST QUESTION (Never repeat) ---
   let nextQuestion = '';
 
   if (isComplete) {
-    paragraphs.push(
-      `J'ai maintenant une cartographie complète et précise de ton profil. Ton Dossier de Cadrage Athlétique personnalisé a été intégralement structuré ci-dessous. Tu peux explorer tes cibles nutritionnelles, examiner les options de répartition et valider quand tu es prêt à initialiser ton suivi en direct !`
+    feedbackParagraphs.push(
+      `J'ai désormais toutes les données nécessaires pour formaliser ton diagnostic complet. Ton Dossier de Cadrage Athlétique personnalisé a été généré ci-dessous avec tes tests de référence, tes options d'entraînement et tes repères nutritionnels. Tu peux l'examiner et le valider pour déverrouiller ton dashboard sur-mesure !`
     );
-  } else if (!hasHistoryDimension) {
-    nextQuestion = `Pour calibrer précisément le volume de travail et la complexité des exercices : as-tu déjà une expérience en musculation ou dans d'autres sports, ou s'agit-il d'une reprise complète ?`;
-  } else if (!hasLifestyleDimension) {
-    nextQuestion = `Pour adapter tes séances à ton rythme sans accumuler de fatigue nerveuse : à quoi ressemble ton quotidien professionnel (travail assis au bureau ou travail actif/debout) et comment qualifierais-tu ton sommeil ?`;
-  } else if (!hasAvailabilityDimension) {
-    nextQuestion = `Côté organisation : combien de séances par semaine souhaites-tu consacrer à tes entraînements, et quel sera ton cadre de pratique (salle de sport équipée, à la maison avec du matériel, ou au poids du corps) ?`;
-  } else if (!hasHealthStatsDimension) {
-    nextQuestion = `Dernière étape clé avant de finaliser ton plan : as-tu des articulations sensibles ou d'anciennes blessures à préserver (épaules, genoux, dos...) ? Et si tu les connais, quel est ton gabarit approximatif (âge, taille et poids) ?`;
+  } else if (!pillarGoalDone && !allAssistantText.includes('objectif')) {
+    nextQuestion = `Pour poser les fondations : quel est ton objectif prioritaire en ce moment (prise de muscle sec, perte de gras ciblée, gain de force ou forme globale), et y a-t-il des zones musculaires que tu souhaites développer en priorité ?`;
+  } else if (!pillarExpDone && !allAssistantText.includes('expérience')) {
+    nextQuestion = `Côté pratique : quel est ton niveau d'expérience en musculation ou dans le sport (débutant absolu, reprise après une pause, ou pratiquant régulier depuis plusieurs mois/années) ?`;
+  } else if (!pillarLifestyleDone && !allAssistantText.includes('métier') && !allAssistantText.includes('quotidien professionnel')) {
+    nextQuestion = `Pour adapter l'intensité sans créer d'épuisement : à quoi ressemble ton quotidien professionnel (travail assis au bureau ou travail physique/debout) et comment se passe ton sommeil ?`;
+  } else if (!pillarLogisticsDone && !allAssistantText.includes('combien de séances')) {
+    nextQuestion = `Côté logistique : combien de séances par semaine souhaites-tu planifier, et où t'entraîneras-tu principalement (en salle de sport, ou à la maison avec du matériel) ?`;
+  } else if (!pillarNutritionDone && !allAssistantText.includes('repas') && !allAssistantText.includes('alimentaire')) {
+    nextQuestion = `Sur le plan alimentaire : as-tu un rythme de repas régulier et bois-tu suffisamment d'eau dans la journée, ou est-ce un domaine où tu manques de repères ?`;
+  } else if (!pillarHealthDone && !allAssistantText.includes('articulations sensibles')) {
+    nextQuestion = `Dernier point fondamental avant de générer ton plan : as-tu des douleurs ou articulations sensibles à protéger (épaules, genoux, dos...), et quel est ton gabarit approximatif (âge, taille et poids) ?`;
   } else {
-    paragraphs.push(
-      `Tous les voyants sont au vert. J'ai réuni les données nécessaires pour formaliser ta feuille de route. Ton Dossier de Cadrage Athlétique personnalisé est accessible ci-dessous.`
+    feedbackParagraphs.push(
+      `Ton profil est maintenant extrêmement clair. Ton Dossier de Cadrage Athlétique personnalisé est structuré ci-dessous.`
     );
   }
 
   if (nextQuestion) {
-    paragraphs.push(nextQuestion);
+    feedbackParagraphs.push(nextQuestion);
   }
 
-  const assistantReply = paragraphs.join('\n\n');
+  const assistantReply = feedbackParagraphs.join('\n\n');
 
-  // Build the detailed Athletic Dossier
+  // --- 5. BUILD THE COMPLETE ATHLETIC DOSSIER ---
   const w = weight;
   const h = height;
   const a = age;
@@ -459,68 +494,106 @@ async function generateDeepSportsScientistDossier(
   else if (daysPerWeek === 4) splitName = 'Upper / Lower Athlétique (4 jours / semaine)';
   else if (daysPerWeek >= 5) splitName = 'Push / Pull / Legs (5 jours / semaine)';
 
-  const recommendedTests: RecommendedTestPlan[] = [
-    {
-      id: 'test-upper',
-      name: isHomeGym ? 'Test Max Pompes Strictes au Sol' : 'Test Développé Poussée & Tirage Haut du Corps',
-      targetMetric: isHomeGym ? 'Répétitions maximales strictes' : 'Charge de travail (kg) ou Reps max',
-      rationale: 'Permet d\'étalonner votre force contractile relative pour fixer vos charges de travail initiales.'
-    },
-    {
-      id: 'test-lower',
-      name: injuries.some(i => i.includes('Genoux')) ? 'Test Chaîne Postérieure & Isométrie Fessiers' : 'Test Goblet Squat / Fentes Contrôlées',
-      targetMetric: 'Répétitions max à tempo contrôlé (3-0-1-0)',
-      rationale: 'Vérifie la stabilité de l\'axe genou-bassin et la mobilité de hanche sous tension.'
-    }
-  ];
+  // Build tailor-made tests based on equipment, goals & injuries
+  const recommendedTests: RecommendedTestPlan[] = [];
 
-  if (isFatLoss || isCardio) {
+  // Upper Test
+  if (isHomeGym) {
     recommendedTests.push({
-      id: 'test-cardio',
-      name: 'Test Récupération Cardiaque & Endurance Aérobie (6 min)',
-      targetMetric: 'Fréquence cardiaque à l\'effort & vitesse de récupération',
-      rationale: 'Calibre vos allures et vos fenêtres de repos pour maximiser la dépense lipidique sans épuisement.'
+      id: 'test-upper',
+      name: 'Test Force Relative Haut : Max Pompes Strictes au Sol',
+      targetMetric: 'Répétitions maximales strictes',
+      rationale: 'Permet d\'étalonner votre force contractile relative au poids de corps pour ajuster vos répétitions cibles.'
+    });
+  } else {
+    recommendedTests.push({
+      id: 'test-upper',
+      name: 'Test Poussée & Force Haut : Développé couché haltères / barre',
+      targetMetric: 'Charge de travail (kg) ou Reps max à charge fixe',
+      rationale: 'Évalue la capacité contractile des pectoraux, épaules et triceps pour fixer les charges de surcharge progressive.'
     });
   }
 
+  // Lower Test
+  if (injuries.some((i) => i.includes('Genoux'))) {
+    recommendedTests.push({
+      id: 'test-lower',
+      name: 'Test Chaîne Postérieure & Isométrie : Chaise 90° sans compression',
+      targetMetric: 'Temps de maintien strict (secondes)',
+      rationale: 'Mesure l\'endurance contractile des quadriceps et la stabilité rotulienne sans déclencher d\'inflammation.'
+    });
+  } else {
+    recommendedTests.push({
+      id: 'test-lower',
+      name: 'Test Puissance Bas du Corps : Goblet Squat / Chaise 90°',
+      targetMetric: 'Répétitions à tempo contrôlé ou temps isométrique (s)',
+      rationale: 'Vérifie l\'alignement hanche-genou-cheville et la force contractile des quadriceps et fessiers.'
+    });
+  }
+
+  // Core Test
+  recommendedTests.push({
+    id: 'test-core',
+    name: 'Test Stabilité Tronc : Planche Gainage Actif',
+    targetMetric: 'Temps de maintien strict (secondes)',
+    rationale: 'Évalue la rigidité du transverse et des obliques pour prévenir les tassements lombaires sur les charges libres.'
+  });
+
+  // Cardio / Conditioning Test if fat loss or endurance
+  if (isFatLoss || isCardio) {
+    recommendedTests.push({
+      id: 'test-cardio',
+      name: 'Test Récupération Cardiaque & Endurance Aérobie (Test 6 min)',
+      targetMetric: 'Fréquence cardiaque à l\'effort & vitesse de récupération',
+      rationale: 'Calibre vos fenêtres de repos pour maximiser l\'oxydation des lipides sans épuisement nerveux.'
+    });
+  }
+
+  // Training Plan Options
   const trainingOptions: TrainingPlanOption[] = [
     {
       title: 'Option A • Recommandée',
       splitType: splitName,
       frequencyDays: daysPerWeek,
-      description: isHomeGym 
-        ? 'Optimisé pour haltères et poids du corps à domicile, maximisant la tension continue.'
+      description: isHomeGym
+        ? 'Optimisé pour haltères et poids du corps à domicile, maximisant la tension continue et les angles protecteurs.'
         : 'Stimulation biquotidienne de chaque chaîne musculaire, conforme aux standards de physiologie moderne.'
     },
     {
       title: 'Option B • Flexible',
       splitType: daysPerWeek === 4 ? 'Full Body Athlétique' : 'Upper / Lower Modulaire',
       frequencyDays: daysPerWeek === 4 ? 3 : 4,
-      description: 'Alternative compacte en cas d\'imprévu professionnel ou familial.'
+      description: 'Alternative compacte en cas d\'imprévu professionnel ou familial pour préserver l\'assiduité.'
     }
   ];
+
+  // Tailor exercise previews based on injuries & gym
+  const upperExercises = isHomeGym
+    ? ['Développé haltères au sol ou banc', 'Rowing unilatéral haltère', 'Élévations latérales', 'Face Pull aux élastiques']
+    : ['Développé couché haltères', 'Tractions pronation ou tirage poitrine', 'Développé militaire', 'Rowing barre'];
+
+  const lowerExercises = injuries.some((i) => i.includes('Genoux'))
+    ? ['Soulevé de terre roumain haltères', 'Hip Thrust / Pont fessier', 'Leg Curl', 'Gainage planche']
+    : ['Goblet Squat contrôlé', 'Soulevé de terre roumain', 'Fentes arrière marchées', 'Gainage actif'];
 
   const sessionsDraft: PlannedSessionDraft[] = [
     {
       title: 'Séance 1 • Haut du Corps (Force & Posture)',
       focus: 'Pectoraux, Grand Dorsal, Rétracteurs Scapulaires',
       durationMin: isJobPhysical ? 50 : 60,
-      exercisesPreview: isHomeGym 
-        ? ['Développé haltères au sol ou banc', 'Rowing unilatéral haltère', 'Élévations latérales', 'Face Pull aux élastiques']
-        : ['Développé couché haltères', 'Tractions pronation ou tirage poitrine', 'Développé militaire', 'Rowing barre']
+      exercisesPreview: upperExercises
     },
     {
       title: 'Séance 2 • Chaîne Postérieure & Bas du Corps',
       focus: 'Ischios, Fessiers, Quadriceps & Gainage',
       durationMin: isJobPhysical ? 50 : 60,
-      exercisesPreview: injuries.some(i => i.includes('Genoux'))
-        ? ['Soulevé de terre roumain haltères', 'Hip Thrust / Pont fessier', 'Leg Curl', 'Gainage planche']
-        : ['Goblet Squat contrôlé', 'Soulevé de terre roumain', 'Fentes arrière marchées', 'Gainage actif']
+      exercisesPreview: lowerExercises
     }
   ];
 
-  const missingReserves = [];
-  if (!weightMatch || !heightMetersMatch) {
+  // Missing data and reserves
+  const missingReserves: Array<{ missingPoint: string; howToObtain: string }> = [];
+  if (!weight || !height) {
     missingReserves.push({
       missingPoint: 'Mensurations précises à confirmer (taille & poids à jeun)',
       howToObtain: 'Pesée le matin au réveil pour affiner les ratios de force relative.'
@@ -528,7 +601,7 @@ async function generateDeepSportsScientistDossier(
   }
   missingReserves.push({
     missingPoint: 'Charges de travail de départ sur les mouvements piliers',
-    howToObtain: 'S\'ajusteront automatiquement dès votre première séance enregistrée.'
+    howToObtain: 'S\'ajusteront automatiquement dès la validation de vos premiers tests et séances.'
   });
 
   const conditionSummaryStats = (a || w || h)
@@ -538,12 +611,16 @@ async function generateDeepSportsScientistDossier(
   const dossier: AgenticAthleticDossier = {
     physicalConditionSummary: `${conditionSummaryStats}${isJobDesk ? 'Profil quotidien sédentaire avec nécessité d\'ouverture thoracique et de réactivation de hanche.' : isJobPhysical ? 'Profil actif avec dépense physique quotidienne soutenue.' : 'Condition de base propice à la progression.'} ${injuries.length > 0 ? `Points de vigilance articulaire : ${injuries.join(', ')}.` : 'Aucune restriction articulaire majeure.'}`,
     recommendedTests,
-    shortTermGoals: isHypertrophy 
-      ? 'Acquisition d\'une technique irréprochable sur les 4 mouvements clés, progression de 10% sur les charges de travail et gain de 1 à 1.5 kg de masse dense en 6 semaines.'
-      : 'Perte de 2 à 3 kg de masse grasse ciblée, consolidation posturale et gain d\'énergie au quotidien sous 6 semaines.',
+    shortTermGoals: isHypertrophy
+      ? 'Acquisition d\'une technique irréprochable sur les mouvements clés, progression de 10% sur les charges et gain de 1 à 1.5 kg de masse dense sous 6 semaines.'
+      : isFatLoss
+      ? 'Perte de 2 à 3 kg de masse grasse ciblée, consolidation posturale et gain d\'énergie au quotidien sous 6 semaines.'
+      : 'Consolidation de la posture, renforcement de la sangle abdominale et progression de force fonctionnelle sous 6 semaines.',
     longTermGoals: isHypertrophy
       ? 'Transformation athlétique durable : +3 à 5 kg de masse contractile, carrure en V et ratio de force supérieur à 1.2x le poids de corps.'
-      : 'Silhouette athlétique affinée, sangle abdominale tonique et aisance cardiovasculaire permanente.',
+      : isFatLoss
+      ? 'Silhouette athlétique affinée, sangle abdominale tonique, métabolisme basal préservé et aisance cardiovasculaire permanente.'
+      : 'Condition physique complète, mobilité sans douleur et endurance musculaire durable.',
     expectedOutcomes: 'Amélioration visible de la posture dès la 3ème semaine, augmentation de la force contractile et meilleure qualité de sommeil.',
     trainingPlanDraft: {
       splitName,
@@ -555,11 +632,13 @@ async function generateDeepSportsScientistDossier(
       dailyCaloriesTarget: calorieTarget,
       proteinGramsTarget: proteinTarget,
       waterLitersTarget: w ? Math.round((w * 0.035 + 0.8) * 10) / 10 : 2.5,
-      nutritionStrategy: isHypertrophy 
+      nutritionStrategy: isHypertrophy
         ? `Léger surplus anabolique (+250 kcal) avec ${proteinTarget}g de protéines réparties en 3-4 repas pour saturer la synthèse protéique.`
-        : `Déficit calorique modéré (-300 kcal) avec apport protéique protecteur (${proteinTarget}g) et hydratation de 2.8L pour préserver le muscle.`,
+        : isFatLoss
+        ? `Déficit calorique modéré (-300 kcal) avec apport protéique protecteur (${proteinTarget}g) et hydratation pour préserver le muscle.`
+        : `Maintenance isocalorique équilibrée avec ${proteinTarget}g de protéines et hydratation constante.`,
       lifestylePillars: [
-        'Sommeil minimum de 7h30 : régulateur principal de l\'hormone de croissance et de la testostérone',
+        'Sommeil régulier de 7h30 minimum : régulateur principal de l\'hormone de croissance et de la testostérone',
         'Hydratation : 500ml d\'eau dès le lever pour relancer le volume plasmatique',
         'Marche quotidienne : 8 000 à 10 000 pas pour entretenir le NEAT sans fatigue nerveuse'
       ]
@@ -569,11 +648,11 @@ async function generateDeepSportsScientistDossier(
       initialWeightKg: w,
       initialHeightCm: h,
       initialAge: a,
-      initialBenchmarkMetricName: isHomeGym ? 'Pompes au sol' : 'Développé couché haltères',
+      initialBenchmarkMetricName: isHomeGym ? 'Pompes strictes au sol' : 'Développé couché haltères',
       initialBenchmarkValue: isHomeGym ? 15 : 20,
       initialBenchmarkUnit: isHomeGym ? 'reps' : 'kg'
     },
-    confidenceScore: isComplete ? 92 : Math.min(85, 45 + turnsCount * 12),
+    confidenceScore: isComplete ? 95 : Math.min(88, 40 + totalPillarsDone * 10),
     isReadyForValidation: isComplete
   };
 
