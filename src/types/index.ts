@@ -72,16 +72,16 @@ export interface GoogleAuthUser {
 export interface UserProfile {
   id: string;
   name: string;
-  age: number;
-  gender: 'male' | 'female' | 'other';
-  heightCm: number;
-  weightKg: number;
+  age?: number;
+  gender?: 'male' | 'female' | 'other';
+  heightCm?: number;
+  weightKg?: number;
   bodyFatPercentage?: number;
   injuries: string[];
-  activityLevel: 'sedentary' | 'light' | 'moderate' | 'very_active';
-  weeklyAvailabilityDays: number;
-  preferredSessionDurationMinutes: number;
-  primaryGoal: 'recomposition' | 'muscle_gain' | 'strength' | 'endurance' | 'mobility_health';
+  activityLevel?: 'sedentary' | 'light' | 'moderate' | 'very_active';
+  weeklyAvailabilityDays?: number;
+  preferredSessionDurationMinutes?: number;
+  primaryGoal?: 'recomposition' | 'muscle_gain' | 'strength' | 'endurance' | 'mobility_health';
   secondaryGoals: string[];
   baselineTests: PhysicalTestMetric[];
   gyms: GymLocation[];
@@ -89,6 +89,7 @@ export interface UserProfile {
   isGoogleAuthenticated: boolean;
   googleUser?: GoogleAuthUser | null;
   onboardingCompleted: boolean;
+  assessmentRawText?: string;
 }
 
 export interface PlannedExercise {

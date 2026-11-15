@@ -256,12 +256,14 @@ export async function queryGeminiCoach(
   }
 
   if (promptLower.includes('manger') || promptLower.includes('nutrition') || promptLower.includes('repas') || promptLower.includes('protéine')) {
+    const proteinTarget = profile.weightKg ? `${(profile.weightKg * 1.8).toFixed(0)}g` : '1.8g / kg de poids de corps';
+    const profileLabel = profile.weightKg ? ` (${profile.weightKg} kg)` : '';
     return {
       id: 'msg-' + Date.now(),
       sender: 'assistant',
       timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      text: `Guide nutritionnel ciblé pour votre profil (${profile.weightKg} kg) :
-1. Cible quotidienne : Visez ${(profile.weightKg * 1.8).toFixed(0)}g de protéines réparties en 3 ou 4 prises (environ 35g par repas).
+      text: `Guide nutritionnel ciblé pour votre profil${profileLabel} :
+1. Cible quotidienne : Visez ${proteinTarget} de protéines réparties en 3 ou 4 prises (environ 30-35g par repas).
 2. Repas pré-entraînement (2h avant) : Glucides complexes à index glycémique modéré (riz, flocons d avoine, banane) + protéines digestes.
 3. Post-entraînement : Réhydratation immédiate (500ml d eau minérale) + apport protéique pour stopper le catabolisme.
 4. Aucun besoin de peser chaque aliment : respectez les repères visuels (1 paume de protéines, 1 poing de féculents, 2 poings de légumes).`
@@ -272,6 +274,6 @@ export async function queryGeminiCoach(
     id: 'msg-' + Date.now(),
     sender: 'assistant',
     timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-    text: `Analyse de votre demande : votre programmation actuelle prend en compte vos objectifs (${profile.primaryGoal}) et vos disponibilités (${profile.weeklyAvailabilityDays} séances/semaine). N'hésitez pas à me signaler un imprévu d'emploi du temps, une fatigue anormale ou un manque d'équipement pour que j'ajuste votre calendrier.`
+    text: `Analyse de votre demande : votre programmation actuelle prend en compte vos objectifs (${profile.primaryGoal || 'forme globale'}) et vos disponibilités (${profile.weeklyAvailabilityDays || 3} séances/semaine). N'hésitez pas à me signaler un imprévu d'emploi du temps, une fatigue anormale ou un manque d'équipement pour que j'ajuste votre calendrier.`
   };
 }

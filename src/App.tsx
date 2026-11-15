@@ -20,6 +20,7 @@ import { ExerciseLibraryView } from './components/ExerciseLibrary/ExerciseLibrar
 import { AICoachView } from './components/AICoach/AICoachView';
 import { ProfileView } from './components/Profile/ProfileView';
 import { OnboardingFlow } from './components/Onboarding/OnboardingFlow';
+import { AgenticAssessmentModal } from './components/Onboarding/AgenticAssessmentModal';
 import { GymPreWorkoutModal } from './components/LiveWorkoutPlayer/GymPreWorkoutModal';
 import { LiveWorkoutModal } from './components/LiveWorkoutPlayer/LiveWorkoutModal';
 import { AccountModal } from './components/Account/AccountModal';
@@ -90,6 +91,7 @@ export const App: React.FC = () => {
   const [isFirebaseConfigOpen, setIsFirebaseConfigOpen] = useState<boolean>(false);
   const [activeTestModal, setActiveTestModal] = useState<TestDefinitionId | null>(null);
   const [isGymModalDirectOpen, setIsGymModalDirectOpen] = useState<boolean>(false);
+  const [isAgenticAssessmentOpen, setIsAgenticAssessmentOpen] = useState<boolean>(false);
 
   // User Profile
   const [profile, setProfile] = useState<UserProfile | null>(() => {
@@ -132,9 +134,9 @@ export const App: React.FC = () => {
       }
       return {
         date: todayStr,
-        weightKg: profile?.weightKg || 75,
-        sleepHours: 7.5,
-        waterLiters: 1.5,
+        weightKg: profile?.weightKg,
+        sleepHours: 0,
+        waterLiters: 0,
         targetWaterLiters: 2.5,
         proteinAdequate: false,
         wholeFoodsAdequate: false,
@@ -143,9 +145,9 @@ export const App: React.FC = () => {
     } catch {
       return {
         date: new Date().toISOString().split('T')[0],
-        weightKg: 75,
-        sleepHours: 7.5,
-        waterLiters: 1.5,
+        weightKg: undefined,
+        sleepHours: 0,
+        waterLiters: 0,
         targetWaterLiters: 2.5,
         proteinAdequate: false,
         wholeFoodsAdequate: false,
@@ -257,15 +259,15 @@ export const App: React.FC = () => {
     const initialProfile: UserProfile = {
       id: googleUser.uid,
       name: googleUser.displayName || existing?.name || 'Athlète',
-      age: existing?.age || 25,
-      gender: existing?.gender || 'male',
-      heightCm: existing?.heightCm || 175,
-      weightKg: existing?.weightKg || 70,
+      age: existing?.age,
+      gender: existing?.gender,
+      heightCm: existing?.heightCm,
+      weightKg: existing?.weightKg,
       injuries: existing?.injuries || [],
-      activityLevel: existing?.activityLevel || 'moderate',
-      weeklyAvailabilityDays: existing?.weeklyAvailabilityDays || 3,
+      activityLevel: existing?.activityLevel,
+      weeklyAvailabilityDays: existing?.weeklyAvailabilityDays,
       preferredSessionDurationMinutes: existing?.preferredSessionDurationMinutes || 60,
-      primaryGoal: existing?.primaryGoal || 'recomposition',
+      primaryGoal: existing?.primaryGoal,
       secondaryGoals: existing?.secondaryGoals || [],
       baselineTests: existing?.baselineTests || [],
       gyms: existing?.gyms || DEFAULT_GYMS,
@@ -288,9 +290,36 @@ export const App: React.FC = () => {
       }
       setActiveTab('dashboard');
     } else {
-      // Guide the user directly to the initial athletic questionnaire (objectives, metrics, gym)
-      setAuthScreen('onboarding');
+      // Guide the user directly to the agentic conversational questionnaire
+      setIsAgenticAssessmentOpen(true);
+      setActiveTab('dashboard');
     }
+  };
+
+  // Agentic Assessment Completion Handler
+  const handleSaveAgenticAssessment = (updatedProfile: UserProfile) => {
+    const mergedProfile: UserProfile = {
+      ...updatedProfile,
+      id: profile?.id || updatedProfile.id || 'athlete-user',
+      name: profile?.name || updatedProfile.name || 'Athlète',
+      isGoogleAuthenticated: !!profile?.isGoogleAuthenticated,
+      googleUser: profile?.googleUser || null,
+      onboardingCompleted: true
+    };
+    const generatedSchedule = generateDefaultSchedule(mergedProfile);
+    setProfile(mergedProfile);
+    setSchedule(generatedSchedule);
+    try {
+      localStorage.setItem('aura_profile', JSON.stringify(mergedProfile));
+      localStorage.setItem('aura_schedule', JSON.stringify(generatedSchedule));
+    } catch {
+      // LocalStorage fallback
+    }
+    setAuthSuccessToast({
+      message: `Profil & objectifs validés : ${mergedProfile.age ? `${mergedProfile.age} ans` : ''} ${mergedProfile.weightKg ? `• ${mergedProfile.weightKg} kg` : ''} ${mergedProfile.primaryGoal ? `• ${mergedProfile.primaryGoal}` : ''}`.trim(),
+      displayName: mergedProfile.name
+    });
+    setIsAgenticAssessmentOpen(false);
   };
 
   // Handle Onboarding Completion
@@ -466,15 +495,15 @@ export const App: React.FC = () => {
   const activeOrGuestProfile: UserProfile = profile || {
     id: 'guest',
     name: 'Athlète',
-    age: 28,
-    gender: 'male',
-    heightCm: 178,
-    weightKg: 75,
+    age: undefined,
+    gender: undefined,
+    heightCm: undefined,
+    weightKg: undefined,
     injuries: [],
-    activityLevel: 'moderate',
-    weeklyAvailabilityDays: 3,
+    activityLevel: undefined,
+    weeklyAvailabilityDays: undefined,
     preferredSessionDurationMinutes: 60,
-    primaryGoal: 'recomposition',
+    primaryGoal: undefined,
     secondaryGoals: [],
     baselineTests: [],
     gyms: DEFAULT_GYMS,
@@ -615,7 +644,7 @@ export const App: React.FC = () => {
       {(!profile || !profile.onboardingCompleted) ? (
         authScreen === 'welcome' ? (
           <WelcomeScreen
-            onStartOnboarding={() => setAuthScreen('onboarding')}
+            onStartOnboarding={() => setIsAgenticAssessmentOpen(true)}
             onGoogleSignInSuccess={handleGoogleSignInSuccess}
             onError={(err) => setCurrentError({ id: 'err-' + Date.now(), ...err })}
             onOpenFirebaseConfig={() => setIsFirebaseConfigOpen(true)}
@@ -654,15 +683,8 @@ export const App: React.FC = () => {
             onOpenAICoach={() => navigateToTab('ai')}
             onOpenGuidedTest={(testId) => setActiveTestModal(testId)}
             onOpenGymConfig={() => setIsGymModalDirectOpen(true)}
-            onReconfigureProfile={() => {
-              if (profile) {
-                setProfile({
-                  ...profile,
-                  onboardingCompleted: false
-                });
-              }
-              setAuthScreen('onboarding');
-            }}
+            onOpenAgenticAssessment={() => setIsAgenticAssessmentOpen(true)}
+            onReconfigureProfile={() => setIsAgenticAssessmentOpen(true)}
           />
         )}
 
@@ -836,6 +858,16 @@ export const App: React.FC = () => {
           isOpen={true}
           onClose={() => setActiveWorkoutSession(null)}
           onFinishWorkout={handleFinishWorkout}
+        />
+      )}
+
+      {/* Agentic Conversational Assessment Modal */}
+      {isAgenticAssessmentOpen && (
+        <AgenticAssessmentModal
+          isOpen={isAgenticAssessmentOpen}
+          onClose={() => setIsAgenticAssessmentOpen(false)}
+          currentProfile={profile || activeOrGuestProfile}
+          onSaveAssessment={handleSaveAgenticAssessment}
         />
       )}
 

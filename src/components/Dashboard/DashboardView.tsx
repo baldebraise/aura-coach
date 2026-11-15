@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile, WeeklyScheduleItem, CompletedWorkoutLog, DailyHabits, PlannedWorkoutSession } from '../../types';
 import { CalibrationBanner } from './CalibrationBanner';
+import { AssessmentBanner } from './AssessmentBanner';
 import { TestDefinitionId, TEST_DEFINITIONS } from './GuidedTestModal';
 import { 
   Dumbbell, 
@@ -98,6 +99,7 @@ interface DashboardViewProps {
   onOpenGuidedTest: (testId: TestDefinitionId) => void;
   onOpenGymConfig?: () => void;
   onReconfigureProfile?: () => void;
+  onOpenAgenticAssessment: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -110,7 +112,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAICoach,
   onOpenGuidedTest,
   onOpenGymConfig,
-  onReconfigureProfile
+  onReconfigureProfile,
+  onOpenAgenticAssessment
 }) => {
   const [notificationGranted, setNotificationGranted] = useState<boolean>(false);
 
@@ -199,7 +202,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         )}
       </div>
 
-      {/* ATHLETIC CALIBRATION HUB BANNER (Priority Action) */}
+      {/* 1. INITIAL ASSESSMENT & QUESTIONNAIRE BANNER (Step 1 before tests) */}
+      <AssessmentBanner
+        profile={profile}
+        onOpenAgenticAssessment={onOpenAgenticAssessment}
+      />
+
+      {/* 2. ATHLETIC CALIBRATION HUB BANNER (Step 2 - Physical Tests) */}
       <CalibrationBanner
         profile={profile}
         onOpenTest={onOpenGuidedTest}
