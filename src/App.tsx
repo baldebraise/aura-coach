@@ -26,6 +26,45 @@ import { FirebaseConfigModal } from './components/Account/FirebaseConfigModal';
 import { ErrorAlertBanner, AppError } from './components/Common/ErrorAlertBanner';
 import { X, Check } from 'lucide-react';
 
+export class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("Erreur critique capturée par ErrorBoundary:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6 flex flex-col justify-center items-center text-center max-w-md mx-auto">
+          <div className="w-12 h-12 rounded-2xl bg-rose-950/80 border border-rose-800 text-rose-400 font-bold flex items-center justify-center mb-4 text-lg">
+            !
+          </div>
+          <h2 className="text-base font-bold mb-2">Erreur d'affichage interceptée</h2>
+          <p className="text-xs text-rose-300 bg-rose-950/40 p-3 rounded-xl border border-rose-900/60 mb-5 font-mono text-left max-h-32 overflow-y-auto">
+            {this.state.error?.message || "Erreur de rendu inattendue."}
+          </p>
+          <button
+            onClick={() => {
+              localStorage.removeItem('aura_profile');
+              localStorage.removeItem('aura_schedule');
+              window.location.reload();
+            }}
+            className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-xl transition"
+          >
+            Réinitialiser les données et recharger
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export const App: React.FC = () => {
   // Navigation State
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -451,10 +490,17 @@ export const App: React.FC = () => {
             profile={profile}
             onOpenAccountModal={() => setIsAccountModalOpen(true)}
             onEnterApp={() => {
-              if (profile) {
-                setProfile({ ...profile, onboardingCompleted: true });
-                setActiveTab('dashboard');
-              }
+              const baseProfile = profile || activeOrGuestProfile;
+              const completed: UserProfile = {
+                ...baseProfile,
+                onboardingCompleted: true
+              };
+              setProfile(completed);
+              const activeSchedule = (schedule && schedule.length > 0)
+                ? schedule
+                : generateDefaultSchedule(completed);
+              setSchedule(activeSchedule);
+              setActiveTab('dashboard');
             }}
           />
         ) : (
@@ -467,8 +513,8 @@ export const App: React.FC = () => {
         <main className="flex-1 max-w-lg mx-auto w-full px-4 pt-4">
         {activeTab === 'dashboard' && (
           <DashboardView
-            profile={profile}
-            schedule={schedule}
+            profile={profile || activeOrGuestProfile}
+            schedule={(schedule && schedule.length > 0) ? schedule : generateDefaultSchedule(profile || activeOrGuestProfile)}
             completedLogs={completedLogs}
             dailyHabits={dailyHabits}
             onUpdateHabits={setDailyHabits}
@@ -482,7 +528,7 @@ export const App: React.FC = () => {
             <div>
               <h1 className="text-xl font-bold text-zinc-100">Séances & Programmation</h1>
               <p className="text-xs text-zinc-500">
-                Planning hebdomadaire calibré sur votre objectif ({profile.primaryGoal})
+                Planning hebdomadaire calibré sur votre objectif ({(profile || activeOrGuestProfile).primaryGoal})
               </p>
             </div>
 
@@ -524,8 +570,8 @@ export const App: React.FC = () => {
 
         {activeTab === 'ai' && (
           <AICoachView
-            profile={profile}
-            schedule={schedule}
+            profile={profile || activeOrGuestProfile}
+            schedule={(schedule && schedule.length > 0) ? schedule : generateDefaultSchedule(profile || activeOrGuestProfile)}
             onApplyAction={handleApplyActionProposal}
             onUpdateProfile={setProfile}
           />
@@ -533,7 +579,7 @@ export const App: React.FC = () => {
 
         {activeTab === 'profile' && (
           <ProfileView
-            profile={profile}
+            profile={profile || activeOrGuestProfile}
             onUpdateProfile={setProfile}
             onResetOnboarding={() => {
               localStorage.removeItem('aura_profile');

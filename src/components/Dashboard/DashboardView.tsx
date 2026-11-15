@@ -49,21 +49,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Today's day of week (0 = Sunday, 1 = Monday, etc.)
   const todayDayOfWeek = new Date().getDay();
-  const todayScheduleItem = schedule.find((s) => s.dayOfWeek === todayDayOfWeek) || schedule[0];
+  const todayScheduleItem = (schedule && schedule.length > 0)
+    ? (schedule.find((s) => s.dayOfWeek === todayDayOfWeek) || schedule[0])
+    : {
+        dayOfWeek: todayDayOfWeek,
+        dayName: 'Aujourd hui',
+        isRestDay: true,
+        session: undefined
+      };
+
+  const userWeight = profile?.weightKg || 75;
 
   // Weight progression chart data
   const weightData = [
-    { date: 'S-3', weight: profile.weightKg + 1.2 },
-    { date: 'S-2', weight: profile.weightKg + 0.8 },
-    { date: 'S-1', weight: profile.weightKg + 0.3 },
-    { date: 'Aujourd hui', weight: dailyHabits.weightKg || profile.weightKg }
+    { date: 'S-3', weight: userWeight + 1.2 },
+    { date: 'S-2', weight: userWeight + 0.8 },
+    { date: 'S-1', weight: userWeight + 0.3 },
+    { date: 'Aujourd hui', weight: dailyHabits?.weightKg || userWeight }
   ];
 
   // Volume history data
-  const volumeData = completedLogs.length > 0
+  const volumeData = (completedLogs && completedLogs.length > 0)
     ? completedLogs.map((log) => ({
         date: new Date(log.date).toLocaleDateString('fr-FR', { weekday: 'short' }),
-        volume: Math.round(log.totalVolumeKg)
+        volume: Math.round(log.totalVolumeKg || 0)
       }))
     : [
         { date: 'Lun', volume: 3200 },
@@ -94,10 +103,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="flex items-center justify-between">
         <div>
           <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-semibold">
-            {profile.primaryGoal.toUpperCase()}
+            {(profile?.primaryGoal || 'recomposition').toUpperCase()}
           </span>
           <h1 className="text-xl font-bold text-zinc-100">
-            Bonjour, {profile.name}
+            Bonjour, {profile?.name || 'Athlète'}
           </h1>
         </div>
 
