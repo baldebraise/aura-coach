@@ -10,7 +10,7 @@ import {
 } from './types';
 import { DEFAULT_GYMS } from './data/defaultGyms';
 import { generateDefaultSchedule } from './services/gemini';
-import { subscribeToAuthChanges } from './services/firebase';
+import { subscribeToAuthChanges, checkRedirectResult } from './services/firebase';
 import { sounds } from './utils/audio';
 import { Navigation, ActiveTab } from './components/Navigation';
 import { WelcomeScreen } from './components/Welcome/WelcomeScreen';
@@ -140,6 +140,27 @@ export const App: React.FC = () => {
 
   // Subscribe to Firebase Auth State changes (persists login across refreshes)
   useEffect(() => {
+    // 1. Process redirect result if page was reloaded by Google OAuth redirect
+    checkRedirectResult().then((user) => {
+      if (user) {
+        handleGoogleSignInSuccess({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL
+        });
+      }
+    }).catch((err) => {
+      console.error("Redirect auth error:", err);
+      setCurrentError({
+        id: 'err-redirect-' + Date.now(),
+        title: 'Erreur retour Google',
+        message: err.message || 'Échec de retour d authentification Google.',
+        code: err.code || 'REDIRECT_AUTH_ERROR'
+      });
+    });
+
+    // 2. Listen to active auth session
     const unsubscribe = subscribeToAuthChanges((firebaseUser) => {
       if (firebaseUser) {
         const googleUser: GoogleAuthUser = {

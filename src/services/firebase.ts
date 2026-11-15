@@ -2,6 +2,8 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { 
   getAuth, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
@@ -74,6 +76,18 @@ export function initializeFirebaseApp(): { app: FirebaseApp | null; auth: Auth |
   }
 }
 
+export async function checkRedirectResult(): Promise<FirebaseUser | null> {
+  const { auth } = initializeFirebaseApp();
+  if (!auth) return null;
+  try {
+    const result = await getRedirectResult(auth);
+    return result ? result.user : null;
+  } catch (err: any) {
+    console.error('Erreur getRedirectResult:', err);
+    throw err;
+  }
+}
+
 export async function loginWithGoogle(): Promise<FirebaseUser> {
   const { auth } = initializeFirebaseApp();
   if (!auth) {
@@ -85,17 +99,38 @@ export async function loginWithGoogle(): Promise<FirebaseUser> {
   const provider = new GoogleAuthProvider();
   provider.addScope('profile');
   provider.addScope('email');
+  provider.setCustomParameters({ prompt: 'select_account' });
+
+  // Detect mobile or standalone PWA environment
+  const isMobileOrStandalone = 
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true;
 
   try {
-    const result = await signInWithPopup(auth, provider);
-    return result.user;
+    if (isMobileOrStandalone) {
+      // Use redirect directly on mobile / PWA to guarantee 100% reliability
+      await signInWithRedirect(auth, provider);
+      return new Promise<FirebaseUser>(() => {});
+    } else {
+      const result = await signInWithPopup(auth, provider);
+      return result.user;
+    }
   } catch (err: any) {
     const errorCode = err.code || 'UNKNOWN_ERROR';
     let userFriendlyMessage = err.message || 'Échec de la connexion Google';
 
-    if (errorCode === 'auth/popup-blocked') {
-      userFriendlyMessage = "Le navigateur de votre téléphone a bloqué la fenêtre popup Google. Veuillez autoriser les fenêtres popups dans les paramètres de votre navigateur.";
-    } else if (errorCode === 'auth/popup-closed-by-user') {
+    // If popup blocked on desktop, fallback to redirect
+    if (errorCode === 'auth/popup-blocked' || errorCode === 'auth/cancelled-popup-request') {
+      try {
+        await signInWithRedirect(auth, provider);
+        return new Promise<FirebaseUser>(() => {});
+      } catch (redirectErr: any) {
+        throw redirectErr;
+      }
+    }
+
+    if (errorCode === 'auth/popup-closed-by-user') {
       userFriendlyMessage = "La fenêtre de connexion Google a été fermée avant la fin de l'authentification.";
     } else if (errorCode === 'auth/unauthorized-domain') {
       userFriendlyMessage = `Le domaine actuel (${window.location.hostname}) n'est pas autorisé dans votre console Firebase (Authentication > Settings > Authorized Domains). Ajoutez "${window.location.hostname}" dans votre console Firebase.`;

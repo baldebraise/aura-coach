@@ -77,8 +77,12 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       };
       onGoogleSignInSuccess(googleUser);
     } catch (err: any) {
+      console.error('Google Sign In Error:', err);
       const message = err.message || "Échec lors de l'authentification avec Google.";
       const isMissingConfig = message.includes('CONFIGURATION_MANQUANTE');
+
+      // Native popup alert to ensure absolute zero silent failure on any device
+      window.alert("Erreur Google : " + message + (err.code ? ` [Code: ${err.code}]` : ''));
 
       onError({
         title: isMissingConfig ? 'Configuration Firebase Requise' : 'Erreur de Connexion Google',
