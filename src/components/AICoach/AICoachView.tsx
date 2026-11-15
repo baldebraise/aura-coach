@@ -37,8 +37,6 @@ export const AICoachView: React.FC<AICoachViewProps> = ({
   ]);
   const [input, setInput] = useState<string>('');
   const [isThinking, setIsThinking] = useState<boolean>(false);
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState<boolean>(false);
-  const [apiKeyInput, setApiKeyInput] = useState<string>(profile.geminiApiKey || '');
 
   const quickPrompts = [
     'J ai une gêne au genou aujourd hui',
@@ -92,16 +90,6 @@ export const AICoachView: React.FC<AICoachViewProps> = ({
     );
   };
 
-  const handleSaveApiKey = (e: React.FormEvent) => {
-    e.preventDefault();
-    onUpdateProfile({
-      ...profile,
-      geminiApiKey: apiKeyInput.trim(),
-      isGoogleAuthenticated: true
-    });
-    setIsKeyModalOpen(false);
-  };
-
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] max-w-lg mx-auto pb-4 animate-in fade-in duration-200">
       {/* Header */}
@@ -121,20 +109,10 @@ export const AICoachView: React.FC<AICoachViewProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={() => setIsKeyModalOpen(true)}
-          className={`p-2 rounded-xl text-xs flex items-center gap-1.5 transition border ${
-            profile.geminiApiKey || profile.isGoogleAuthenticated
-              ? 'bg-zinc-900 border-zinc-800 text-emerald-400'
-              : 'bg-zinc-900 border-amber-900/80 text-amber-400'
-          }`}
-          title="Connexion Google / Clé Gemini"
-        >
-          <Key className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">
-            {profile.geminiApiKey ? 'Connecté' : 'Activer IA'}
-          </span>
-        </button>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-950/60 border border-emerald-800/80 rounded-xl text-xs text-emerald-400 font-medium">
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>{profile.isGoogleAuthenticated ? 'Gemini 2.5 Flash' : 'Moteur AURA'}</span>
+        </div>
       </div>
 
       {/* Messages Scroll Area */}
@@ -239,46 +217,7 @@ export const AICoachView: React.FC<AICoachViewProps> = ({
           <Send className="w-4 h-4" />
         </button>
       </form>
-
-      {/* API Key / Google Auth Modal */}
-      {isKeyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-2xl">
-            <h3 className="text-sm font-bold text-zinc-100 mb-1">
-              Connexion Google & Clé Gemini
-            </h3>
-            <p className="text-xs text-zinc-400 mb-4">
-              Connectez votre compte Google ou saisissez votre clé d'API Google AI Studio pour débloquer les réponses en direct.
-            </p>
-
-            <form onSubmit={handleSaveApiKey} className="space-y-3">
-              <input
-                type="password"
-                placeholder="Clé API Gemini (AI Studio)..."
-                value={apiKeyInput}
-                onChange={(e) => setApiKeyInput(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-emerald-500 font-mono"
-              />
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsKeyModalOpen(false)}
-                  className="flex-1 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-xs rounded-xl"
-                >
-                  Fermer
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-xl"
-                >
-                  Sauvegarder
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
+

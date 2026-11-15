@@ -1,5 +1,7 @@
 import { UserProfile, PlannedWorkoutSession, WeeklyScheduleItem, AIChatMessage } from '../types';
 import { EXERCISES_DATABASE } from '../data/exercises';
+import { initializeFirebaseApp } from './firebase';
+import { getAI, getGenerativeModel } from 'firebase/ai';
 
 // Fallback high-performance generator when offline or before Gemini API key is configured
 export function generateDefaultSchedule(profile: UserProfile): WeeklyScheduleItem[] {
@@ -168,7 +170,6 @@ export function generateDefaultSchedule(profile: UserProfile): WeeklyScheduleIte
   return schedule;
 }
 
-// Intelligent Coach Assistant answering queries with actionable cards
 export async function queryGeminiCoach(
   userPrompt: string,
   profile: UserProfile,
@@ -176,43 +177,52 @@ export async function queryGeminiCoach(
 ): Promise<AIChatMessage> {
   const promptLower = userPrompt.toLowerCase();
 
-  // If user has provided their Gemini API key, we can call the official Google Generative AI API
-  if (profile.geminiApiKey) {
+  // 1. If user is connected via Google, call Gemini directly via Firebase AI Logic (zero manual API key entry)
+  if (profile.isGoogleAuthenticated) {
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${profile.geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: `Tu es un coach sportif et scientifique d'élite (AURA). Réponds de façon concise, précise, sans émojis. L'utilisateur a le profil suivant: ${profile.age} ans, ${profile.weightKg}kg, objectif: ${profile.primaryGoal}, blessures antérieures: ${profile.injuries.join(', ')}. Question: ${userPrompt}`
-                  }
-                ]
-              }
-            ]
-          })
+      const { app } = initializeFirebaseApp();
+      if (app) {
+        const ai = getAI(app);
+        const model = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
+        const systemPrompt = `Tu es le conseiller scientifique et athlétique d'élite AURA. Réponds de façon concise, précise, encourageante, SANS AUCUN ÉMOJI. Profil athlète : ${profile.name}, ${profile.age} ans, ${profile.weightKg}kg, objectif: ${profile.primaryGoal}, blessures antérieures: ${profile.injuries.length > 0 ? profile.injuries.join(', ') : 'aucune'}. Salles disponibles: ${profile.gyms.map(g => g.name).join(', ')}. Question de l'athlète: ${userPrompt}`;
+
+        const response = await model.generateContent(systemPrompt);
+        const answerText = response?.response?.text();
+        if (answerText && answerText.trim()) {
+          let actionProposal: AIChatMessage['actionProposal'] = undefined;
+          if (promptLower.includes('genou') || promptLower.includes('douleur')) {
+            actionProposal = {
+              id: 'prop-' + Date.now(),
+              type: 'replace_exercise',
+              title: 'Remplacer Fentes Marchées par Fentes Isométriques Arrière',
+              description: 'Décharge le tendon rotulien tout en préservant le recrutement des fessiers.',
+              details: { replaceFrom: 'walking-lunges-dumbbells', replaceTo: 'rear-lunge-isometric' }
+            };
+          } else if (promptLower.includes('30 min') || promptLower.includes('court') || promptLower.includes('presse')) {
+            actionProposal = {
+              id: 'prop-' + Date.now(),
+              type: 'adjust_volume',
+              title: 'Condenser la séance à 30 minutes',
+              description: 'Conservation des 3 mouvements polyarticulaires majeurs avec 2 séries chacun.',
+              details: { targetDuration: 30, maxSets: 2 }
+            };
+          }
+
+          return {
+            id: 'msg-' + Date.now(),
+            sender: 'assistant',
+            timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+            text: answerText.trim(),
+            actionProposal
+          };
         }
-      );
-      const data = await response.json();
-      const answerText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (answerText) {
-        return {
-          id: 'msg-' + Date.now(),
-          sender: 'assistant',
-          timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-          text: answerText
-        };
       }
-    } catch {
-      // Fallback below
+    } catch (err: any) {
+      console.warn('Firebase AI Logic fallback to heuristic expert engine:', err.message);
     }
   }
 
-  // High-accuracy expert heuristic responses with action proposals
+  // 2. High-accuracy expert heuristic responses with action proposals
   if (promptLower.includes('genou') || promptLower.includes('douleur') || promptLower.includes('mal')) {
     return {
       id: 'msg-' + Date.now(),

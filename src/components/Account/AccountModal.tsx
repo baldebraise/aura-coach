@@ -211,17 +211,29 @@ export const AccountModal: React.FC<AccountModalProps> = ({
           <div className="p-3.5 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-purple-400" />
+                <Sparkles className="w-4 h-4 text-emerald-400" />
                 <span className="font-semibold text-zinc-200">Moteur IA Gemini</span>
               </div>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-950 text-zinc-400 border border-zinc-800">
-                gemini-1.5-flash
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                profile.isGoogleAuthenticated
+                  ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
+                  : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+              }`}>
+                {profile.isGoogleAuthenticated ? 'gemini-2.5-flash • Actif' : 'Mode Local'}
               </span>
             </div>
-            <p className="text-[11px] text-zinc-400">
-              {profile.geminiApiKey
-                ? 'Clé Google AI Studio configurée et active pour le conseiller agentique.'
-                : 'Clé non renseignée (mode heuristique local actif).'}
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${profile.isGoogleAuthenticated ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'}`} />
+              <span className="text-[11px] text-zinc-300 font-medium">
+                {profile.isGoogleAuthenticated
+                  ? 'Actif via votre session Google (Firebase AI Logic)'
+                  : 'Session Google requise pour l accès direct'}
+              </span>
+            </div>
+            <p className="text-[11px] text-zinc-500">
+              {profile.isGoogleAuthenticated
+                ? 'Conseiller agentique débloqué. Vos questions et adaptations de séances sont traitées directement sans aucune clé à renseigner.'
+                : 'Connectez votre compte Google pour activer les réponses du conseiller Gemini.'}
             </p>
           </div>
 
