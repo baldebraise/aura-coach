@@ -21,13 +21,28 @@ export interface StoredFirebaseConfig {
 
 const CONFIG_STORAGE_KEY = 'aura_firebase_config';
 
-export function getStoredFirebaseConfig(): StoredFirebaseConfig | null {
+export const DEFAULT_FIREBASE_CONFIG: StoredFirebaseConfig = {
+  projectId: "aura-coach-18853",
+  appId: "1:273202185240:web:8be6c8e341f4343ba6ef6d",
+  storageBucket: "aura-coach-18853.firebasestorage.app",
+  apiKey: "AIzaSyDpipGtQkMTnsvYkS0bVnauVtXpfmlUwHY",
+  authDomain: "aura-coach-18853.firebaseapp.com",
+  messagingSenderId: "273202185240",
+};
+
+export function getStoredFirebaseConfig(): StoredFirebaseConfig {
   try {
     const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.apiKey && parsed.authDomain && parsed.projectId) {
+        return parsed;
+      }
+    }
   } catch {
-    return null;
+    // fallback
   }
+  return DEFAULT_FIREBASE_CONFIG;
 }
 
 export function saveStoredFirebaseConfig(config: StoredFirebaseConfig) {
@@ -84,6 +99,8 @@ export async function loginWithGoogle(): Promise<FirebaseUser> {
       userFriendlyMessage = "La fenêtre de connexion Google a été fermée avant la fin de l'authentification.";
     } else if (errorCode === 'auth/unauthorized-domain') {
       userFriendlyMessage = `Le domaine actuel (${window.location.hostname}) n'est pas autorisé dans votre console Firebase (Authentication > Settings > Authorized Domains). Ajoutez "${window.location.hostname}" dans votre console Firebase.`;
+    } else if (errorCode === 'auth/operation-not-allowed' || errorCode === 'auth/configuration-not-found') {
+      userFriendlyMessage = "Le fournisseur Google Auth n'est pas encore activé dans votre console Firebase (Authentication > Sign-in method > Google > Activer).";
     } else if (errorCode === 'auth/network-request-failed') {
       userFriendlyMessage = "Erreur réseau : impossible de joindre les serveurs Google. Vérifiez votre connexion internet.";
     }
