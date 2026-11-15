@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserProfile, WeeklyScheduleItem, CompletedWorkoutLog, DailyHabits, PlannedWorkoutSession } from '../../types';
 import { CalibrationBanner } from './CalibrationBanner';
 import { AssessmentBanner } from './AssessmentBanner';
@@ -118,7 +118,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAgenticAssessment
 }) => {
   const [notificationGranted, setNotificationGranted] = useState<boolean>(false);
-  const [isDetailedNutritionOpen, setIsDetailedNutritionOpen] = useState<boolean>(false);
+  const [isDetailedNutritionOpen, setIsDetailedNutritionOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('aura_nutrition_modal_open') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (isDetailedNutritionOpen) {
+        localStorage.setItem('aura_nutrition_modal_open', 'true');
+      } else {
+        localStorage.removeItem('aura_nutrition_modal_open');
+      }
+    } catch {}
+  }, [isDetailedNutritionOpen]);
 
   // Today's day of week (0 = Sunday, 1 = Monday, etc.)
   const todayDayOfWeek = new Date().getDay();

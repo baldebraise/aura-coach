@@ -69,9 +69,25 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
 }
 
 export const App: React.FC = () => {
-  // Navigation State with history
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
-  const [tabHistory, setTabHistory] = useState<ActiveTab[]>([]);
+  // Navigation State with history persisted across restarts
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    try {
+      const saved = localStorage.getItem('aura_active_tab');
+      if (saved && ['dashboard', 'workout', 'library', 'ai', 'profile'].includes(saved)) {
+        return saved as ActiveTab;
+      }
+    } catch {}
+    return 'dashboard';
+  });
+
+  const [tabHistory, setTabHistory] = useState<ActiveTab[]>(() => {
+    try {
+      const saved = localStorage.getItem('aura_tab_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Screen state when not fully onboarded: 'welcome' | 'onboarding'
   const [authScreen, setAuthScreen] = useState<'welcome' | 'onboarding'>('welcome');
@@ -86,12 +102,25 @@ export const App: React.FC = () => {
     displayName?: string | null;
   } | null>(null);
 
-  // Modals State
+  // Modals State persisted
   const [isAccountModalOpen, setIsAccountModalOpen] = useState<boolean>(false);
   const [isFirebaseConfigOpen, setIsFirebaseConfigOpen] = useState<boolean>(false);
-  const [activeTestModal, setActiveTestModal] = useState<TestDefinitionId | null>(null);
+  const [activeTestModal, setActiveTestModal] = useState<TestDefinitionId | null>(() => {
+    try {
+      const saved = localStorage.getItem('aura_active_test_modal');
+      return saved ? (saved as TestDefinitionId) : null;
+    } catch {
+      return null;
+    }
+  });
   const [isGymModalDirectOpen, setIsGymModalDirectOpen] = useState<boolean>(false);
-  const [isAgenticAssessmentOpen, setIsAgenticAssessmentOpen] = useState<boolean>(false);
+  const [isAgenticAssessmentOpen, setIsAgenticAssessmentOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('aura_agentic_assessment_open') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // User Profile
   const [profile, setProfile] = useState<UserProfile | null>(() => {
@@ -156,14 +185,63 @@ export const App: React.FC = () => {
     }
   });
 
-  // Live Workout Session Modals
+  // Live Workout Session Modals persisted
   const [pendingSessionToStart, setPendingSessionToStart] = useState<PlannedWorkoutSession | null>(null);
   const [activeWorkoutSession, setActiveWorkoutSession] = useState<{
     session: PlannedWorkoutSession;
     gym: GymLocation;
-  } | null>(null);
+  } | null>(() => {
+    try {
+      const saved = localStorage.getItem('aura_active_workout_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Sync to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('aura_active_tab', activeTab);
+    } catch {}
+  }, [activeTab]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('aura_tab_history', JSON.stringify(tabHistory));
+    } catch {}
+  }, [tabHistory]);
+
+  useEffect(() => {
+    try {
+      if (activeTestModal) {
+        localStorage.setItem('aura_active_test_modal', activeTestModal);
+      } else {
+        localStorage.removeItem('aura_active_test_modal');
+      }
+    } catch {}
+  }, [activeTestModal]);
+
+  useEffect(() => {
+    try {
+      if (isAgenticAssessmentOpen) {
+        localStorage.setItem('aura_agentic_assessment_open', 'true');
+      } else {
+        localStorage.removeItem('aura_agentic_assessment_open');
+      }
+    } catch {}
+  }, [isAgenticAssessmentOpen]);
+
+  useEffect(() => {
+    try {
+      if (activeWorkoutSession) {
+        localStorage.setItem('aura_active_workout_session', JSON.stringify(activeWorkoutSession));
+      } else {
+        localStorage.removeItem('aura_active_workout_session');
+      }
+    } catch {}
+  }, [activeWorkoutSession]);
+
   useEffect(() => {
     if (profile) {
       localStorage.setItem('aura_profile', JSON.stringify(profile));

@@ -27,14 +27,27 @@ export const AICoachView: React.FC<AICoachViewProps> = ({
   onApplyAction,
   onUpdateProfile
 }) => {
-  const [messages, setMessages] = useState<AIChatMessage[]>([
-    {
-      id: 'welcome',
-      sender: 'assistant',
-      timestamp: 'Maintenant',
-      text: `Bonjour ${profile.name}. Je suis votre conseiller scientifique et athlétique AURA. Votre programmation est calibrée pour votre objectif (${profile.primaryGoal}). Vous pouvez me solliciter à tout moment pour ajuster une séance, compenser une douleur ou optimiser votre nutrition.`
-    }
-  ]);
+  const [messages, setMessages] = useState<AIChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('aura_ai_coach_messages');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      {
+        id: 'welcome',
+        sender: 'assistant',
+        timestamp: 'Maintenant',
+        text: `Bonjour ${profile.name}. Je suis votre conseiller scientifique et athlétique AURA. Votre programmation est calibrée pour votre objectif (${profile.primaryGoal}). Vous pouvez me solliciter à tout moment pour ajuster une séance, compenser une douleur ou optimiser votre nutrition.`
+      }
+    ];
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('aura_ai_coach_messages', JSON.stringify(messages));
+    } catch {}
+  }, [messages]);
+
   const [input, setInput] = useState<string>('');
   const [isThinking, setIsThinking] = useState<boolean>(false);
 

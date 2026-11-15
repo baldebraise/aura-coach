@@ -29,10 +29,40 @@ export const ExerciseLibraryView: React.FC<ExerciseLibraryViewProps> = ({
   onOpenTest
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [selectedMuscle, setSelectedMuscle] = useState<string>('all');
+  const [selectedMuscle, setSelectedMuscle] = useState<string>(() => {
+    try {
+      return localStorage.getItem('aura_library_muscle') || 'all';
+    } catch {
+      return 'all';
+    }
+  });
   const [selectedEquipment, setSelectedEquipment] = useState<string>('all');
-  const [activeExerciseModal, setActiveExerciseModal] = useState<Exercise | null>(null);
+  const [activeExerciseModal, setActiveExerciseModal] = useState<Exercise | null>(() => {
+    try {
+      const savedId = localStorage.getItem('aura_library_exercise_id');
+      if (savedId) {
+        return EXERCISES_DATABASE.find((e) => e.id === savedId) || null;
+      }
+    } catch {}
+    return null;
+  });
   const [showLockedAccordion, setShowLockedAccordion] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('aura_library_muscle', selectedMuscle);
+    } catch {}
+  }, [selectedMuscle]);
+
+  React.useEffect(() => {
+    try {
+      if (activeExerciseModal) {
+        localStorage.setItem('aura_library_exercise_id', activeExerciseModal.id);
+      } else {
+        localStorage.removeItem('aura_library_exercise_id');
+      }
+    } catch {}
+  }, [activeExerciseModal]);
 
   const availableEquipment: EquipmentType[] = profile?.gyms?.[0]?.equipment || [
     'bodyweight',

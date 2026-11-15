@@ -41,17 +41,46 @@ export const LiveWorkoutModal: React.FC<LiveWorkoutModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  // Current Exercise Index
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState<number>(0);
+  const storageKey = `aura_live_session_${session.id}`;
+
+  const clearProgressStorage = () => {
+    try {
+      localStorage.removeItem(`${storageKey}_idx`);
+      localStorage.removeItem(`${storageKey}_time`);
+      localStorage.removeItem(`${storageKey}_sets`);
+      localStorage.removeItem('aura_active_workout_session');
+    } catch {}
+  };
+
+  // Current Exercise Index persisted
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(`${storageKey}_idx`);
+      return saved ? parseInt(saved) : 0;
+    } catch {
+      return 0;
+    }
+  });
 
   // Active Exercises list (allows in-session substitutions)
   const [exercisesList, setExercisesList] = useState(session.exercises);
 
-  // Workout Elapsed Time
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  // Workout Elapsed Time persisted
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(`${storageKey}_time`);
+      return saved ? parseInt(saved) : 0;
+    } catch {
+      return 0;
+    }
+  });
 
-  // Sets logging state per exercise: Record<exerciseId, WorkoutSetLog[]>
+  // Sets logging state per exercise: Record<exerciseId, WorkoutSetLog[]> persisted
   const [loggedSets, setLoggedSets] = useState<Record<string, WorkoutSetLog[]>>(() => {
+    try {
+      const saved = localStorage.getItem(`${storageKey}_sets`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
     const initial: Record<string, WorkoutSetLog[]> = {};
     session.exercises.forEach((ex) => {
       initial[ex.exerciseId] = Array.from({ length: ex.targetSets }, (_, i) => ({
@@ -64,6 +93,15 @@ export const LiveWorkoutModal: React.FC<LiveWorkoutModalProps> = ({
     });
     return initial;
   });
+
+  // Sync workout progress state to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(`${storageKey}_idx`, String(currentExerciseIndex));
+      localStorage.setItem(`${storageKey}_time`, String(elapsedSeconds));
+      localStorage.setItem(`${storageKey}_sets`, JSON.stringify(loggedSets));
+    } catch {}
+  }, [currentExerciseIndex, elapsedSeconds, loggedSets, storageKey]);
 
   // Rest Timer State
   const [isRestActive, setIsRestActive] = useState<boolean>(false);
@@ -227,6 +265,7 @@ export const LiveWorkoutModal: React.FC<LiveWorkoutModalProps> = ({
           <button
             onClick={() => {
               if (window.confirm('Voulez-vous quitter la séance en cours ?')) {
+                clearProgressStorage();
                 onClose();
               }
             }}
@@ -496,6 +535,7 @@ export const LiveWorkoutModal: React.FC<LiveWorkoutModalProps> = ({
           isOpen={isSummaryOpen}
           onClose={() => setIsSummaryOpen(false)}
           onSaveAndExit={(finalLog) => {
+            clearProgressStorage();
             onFinishWorkout(finalLog);
             setIsSummaryOpen(false);
             onClose();
