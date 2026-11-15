@@ -47,6 +47,10 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 }) => {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced'>('idle');
   const [lastSyncTime, setLastSyncTime] = useState<string>('À l instant');
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
+    return localStorage.getItem('aura_gemini_api_key') || profile.geminiApiKey || '';
+  });
+  const [isKeySaved, setIsKeySaved] = useState<boolean>(false);
   const firebaseConfig = getStoredFirebaseConfig();
 
   if (!isOpen) return null;
@@ -210,34 +214,67 @@ export const AccountModal: React.FC<AccountModalProps> = ({
             </button>
           </div>
 
-          {/* 3. Moteur IA Gemini */}
-          <div className="p-3.5 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-2">
+          {/* 3. Moteur IA Google Gemini */}
+          <div className="p-3.5 bg-zinc-900/50 border border-zinc-800 rounded-xl space-y-2.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-400" />
-                <span className="font-semibold text-zinc-200">Moteur IA Gemini</span>
+                <span className="font-semibold text-zinc-200">Moteur IA Google Gemini</span>
               </div>
               <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                profile.isGoogleAuthenticated
+                geminiApiKey
                   ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
-                  : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                  : 'bg-amber-950/80 text-amber-400 border-amber-800'
               }`}>
-                {profile.isGoogleAuthenticated ? 'gemini-2.5-flash • Actif' : 'Mode Local'}
+                {geminiApiKey ? 'Clé Configurée' : 'Clé Manquante'}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${profile.isGoogleAuthenticated ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'}`} />
-              <span className="text-[11px] text-zinc-300 font-medium">
-                {profile.isGoogleAuthenticated
-                  ? 'Actif via votre session Google (Firebase AI Logic)'
-                  : 'Session Google requise pour l accès direct'}
-              </span>
-            </div>
-            <p className="text-[11px] text-zinc-500">
-              {profile.isGoogleAuthenticated
-                ? 'Conseiller agentique débloqué. Vos questions et adaptations de séances sont traitées directement sans aucune clé à renseigner.'
-                : 'Connectez votre compte Google pour activer les réponses du conseiller Gemini.'}
+
+            <p className="text-[11px] text-zinc-400">
+              Active le Directeur Scientifique AURA pour l'analyse approfondie et les réponses en temps réel (zéro réponse simulée).
             </p>
+
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={geminiApiKey}
+                onChange={(e) => {
+                  setGeminiApiKey(e.target.value);
+                  setIsKeySaved(false);
+                }}
+                placeholder="Clé Google AI Studio (AIzaSy...)"
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-emerald-500 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const cleaned = geminiApiKey.trim();
+                  if (cleaned) {
+                    localStorage.setItem('aura_gemini_api_key', cleaned);
+                  } else {
+                    localStorage.removeItem('aura_gemini_api_key');
+                  }
+                  onUpdateProfile({ ...profile, geminiApiKey: cleaned });
+                  setIsKeySaved(true);
+                  sounds.playTick();
+                  setTimeout(() => setIsKeySaved(false), 2000);
+                }}
+                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-lg transition shrink-0"
+              >
+                {isKeySaved ? 'Enregistré !' : 'Enregistrer'}
+              </button>
+            </div>
+
+            <div className="flex justify-end">
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] text-emerald-400 hover:underline"
+              >
+                Obtenir une clé gratuite sur Google AI Studio
+              </a>
+            </div>
           </div>
 
           {/* 4. Sauvegarde & Restauration (Export / Import JSON) */}

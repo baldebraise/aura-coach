@@ -178,115 +178,69 @@ export async function queryGeminiCoach(
 ): Promise<AIChatMessage> {
   const promptLower = userPrompt.toLowerCase();
 
-  // 1. Try Direct Google Gemini API (gemini-3.8-flash)
+  // 1. Direct Google Gemini API caller
   const apiKey = getActiveGeminiApiKey(profile);
-  if (apiKey) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-      const systemPrompt = `Tu es le conseiller scientifique et athlétique d'élite AURA. Réponds de façon concise, précise, encourageante, SANS AUCUN ÉMOJI. Profil athlète : ${profile.name || 'Athlète'}, ${profile.age || 28} ans, ${profile.weightKg || 75}kg, objectif: ${profile.primaryGoal || 'forme globale'}, blessures antérieures: ${profile.injuries && profile.injuries.length > 0 ? profile.injuries.join(', ') : 'aucune'}. Salles disponibles: ${profile.gyms ? profile.gyms.map(g => g.name).join(', ') : 'Maison'}. Question de l'athlète: ${userPrompt}`;
-      
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: systemPrompt }] }]
-          })
-        }
-      );
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        const data = await res.json();
-        const answerText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (answerText && answerText.trim()) {
-          let actionProposal: AIChatMessage['actionProposal'] = undefined;
-          if (promptLower.includes('genou') || promptLower.includes('douleur')) {
-            actionProposal = {
-              id: 'prop-' + Date.now(),
-              type: 'replace_exercise',
-              title: 'Remplacer Fentes Marchées par Fentes Isométriques Arrière',
-              description: 'Décharge le tendon rotulien tout en préservant le recrutement des fessiers.',
-              details: { replaceFrom: 'walking-lunges-dumbbells', replaceTo: 'rear-lunge-isometric' }
-            };
-          } else if (promptLower.includes('30 min') || promptLower.includes('court') || promptLower.includes('presse')) {
-            actionProposal = {
-              id: 'prop-' + Date.now(),
-              type: 'adjust_volume',
-              title: 'Condenser la séance à 30 minutes',
-              description: 'Conservation des 3 mouvements polyarticulaires majeurs avec 2 séries chacun.',
-              details: { targetDuration: 30, maxSets: 2 }
-            };
-          }
+  if (!apiKey || !apiKey.trim()) {
+    return {
+      id: 'msg-err-' + Date.now(),
+      sender: 'assistant',
+      timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      text: "⚠️ [ERREUR IA : Clé absente] Aucune clé API Google Gemini n'est configurée. Veuillez renseigner votre clé Google AI Studio (commençant par AIzaSy...) dans les paramètres pour dialoguer avec le coach."
+    };
+  }
 
-          return {
-            id: 'msg-' + Date.now(),
-            sender: 'assistant',
-            timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-            text: answerText.trim(),
-            actionProposal
-          };
-        }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 16000);
+    const systemPrompt = `Tu es le conseiller scientifique et athlétique d'élite AURA. Réponds de façon concise, précise, encourageante, SANS AUCUN ÉMOJI. Profil athlète : ${profile.name || 'Athlète'}, ${profile.age || 28} ans, ${profile.weightKg || 75}kg, objectif: ${profile.primaryGoal || 'forme globale'}, blessures antérieures: ${profile.injuries && profile.injuries.length > 0 ? profile.injuries.join(', ') : 'aucune'}. Salles disponibles: ${profile.gyms ? profile.gyms.map(g => g.name).join(', ') : 'Maison'}. Question de l'athlète: ${userPrompt}`;
+    
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: systemPrompt }] }]
+        })
       }
-    } catch (err: any) {
-      console.warn('Direct Gemini call failed, trying fallback:', err);
+    );
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      const errorMsg = errorData?.error?.message || `HTTP ${res.status} (${res.statusText})`;
+      return {
+        id: 'msg-err-' + Date.now(),
+        sender: 'assistant',
+        timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        text: `⚠️ [ERREUR API GEMINI ${res.status}] : ${errorMsg}. Vérifiez votre clé Google AI Studio dans les paramètres.`
+      };
     }
-  }
 
-  // 2. High-accuracy expert heuristic responses with action proposals
-  if (promptLower.includes('genou') || promptLower.includes('douleur') || promptLower.includes('mal')) {
+    const data = await res.json();
+    const answerText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (answerText && answerText.trim()) {
+      return {
+        id: 'msg-' + Date.now(),
+        sender: 'assistant',
+        timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        text: answerText.trim()
+      };
+    } else {
+      return {
+        id: 'msg-err-' + Date.now(),
+        sender: 'assistant',
+        timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        text: "⚠️ [ERREUR API GEMINI] Réponse vide reçue du modèle."
+      };
+    }
+  } catch (err: any) {
     return {
-      id: 'msg-' + Date.now(),
+      id: 'msg-err-' + Date.now(),
       sender: 'assistant',
       timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      text: 'Face à un signal douloureux, il est impératif d éviter la compression patellaire tout en maintenant l activation musculaire sans impact. Je vous propose de remplacer le squat par du soulevé de terre roumain (axé chaîne postérieure) et de la chaise isométrique contrôlée.',
-      actionProposal: {
-        id: 'prop-knee-sub',
-        type: 'replace_exercise',
-        title: 'Substitution Articulaire Sécurisée',
-        description: 'Remplacement des squats par Soulevé de Terre Roumain (Ischios) et Chaise Isométrique.',
-        details: { replaceFrom: 'goblet-squat-dumbbell', replaceTo: 'romanian-deadlift-dumbbells' }
-      }
+      text: `⚠️ [ERREUR DE CONNEXION GEMINI] : ${err?.message || String(err)}`
     };
   }
-
-  if (promptLower.includes('30 min') || promptLower.includes('pressé') || promptLower.includes('court') || promptLower.includes('temps')) {
-    return {
-      id: 'msg-' + Date.now(),
-      sender: 'assistant',
-      timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      text: 'Optimisation de la séance en format condensé : réduction du volume accessoire, conservation des deux mouvements polyarticulaires majeurs en superset antagoniste (repos réduit à 60s). Densité maximale en 30 minutes chrono.',
-      actionProposal: {
-        id: 'prop-time-compress',
-        type: 'adjust_volume',
-        title: 'Compresser la Séance en 30 min',
-        description: 'Passe la séance à 3 exercices clés en 3 séries avec 60s de repos.',
-        details: { targetDuration: 30, maxSets: 3 }
-      }
-    };
-  }
-
-  if (promptLower.includes('manger') || promptLower.includes('nutrition') || promptLower.includes('repas') || promptLower.includes('protéine')) {
-    const proteinTarget = profile.weightKg ? `${(profile.weightKg * 1.8).toFixed(0)}g` : '1.8g / kg de poids de corps';
-    const profileLabel = profile.weightKg ? ` (${profile.weightKg} kg)` : '';
-    return {
-      id: 'msg-' + Date.now(),
-      sender: 'assistant',
-      timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      text: `Guide nutritionnel ciblé pour votre profil${profileLabel} :
-1. Cible quotidienne : Visez ${proteinTarget} de protéines réparties en 3 ou 4 prises (environ 30-35g par repas).
-2. Repas pré-entraînement (2h avant) : Glucides complexes à index glycémique modéré (riz, flocons d avoine, banane) + protéines digestes.
-3. Post-entraînement : Réhydratation immédiate (500ml d eau minérale) + apport protéique pour stopper le catabolisme.
-4. Aucun besoin de peser chaque aliment : respectez les repères visuels (1 paume de protéines, 1 poing de féculents, 2 poings de légumes).`
-    };
-  }
-
-  return {
-    id: 'msg-' + Date.now(),
-    sender: 'assistant',
-    timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-    text: `Analyse de votre demande : votre programmation actuelle prend en compte vos objectifs (${profile.primaryGoal || 'forme globale'}) et vos disponibilités (${profile.weeklyAvailabilityDays || 3} séances/semaine). N'hésitez pas à me signaler un imprévu d'emploi du temps, une fatigue anormale ou un manque d'équipement pour que j'ajuste votre calendrier.`
-  };
 }

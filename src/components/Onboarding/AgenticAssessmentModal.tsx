@@ -30,7 +30,8 @@ import {
   TrendingUp,
   RotateCcw,
   Key,
-  Check
+  Check,
+  AlertTriangle
 } from 'lucide-react';
 
 interface AgenticAssessmentModalProps {
@@ -61,6 +62,7 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
     id: string;
     sender: 'agent' | 'user';
     text: string;
+    isError?: boolean;
   }>>(() => {
     try {
       const saved = localStorage.getItem('aura_agentic_messages');
@@ -135,11 +137,13 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
     setIsAnalyzing(true);
 
     try {
-      // Map dialogue to role/text format
-      const dialogueForAi = updatedMessages.map((m) => ({
-        role: m.sender === 'user' ? ('user' as const) : ('assistant' as const),
-        text: m.text
-      }));
+      // Map dialogue to role/text format, filtering out error messages so they don't pollute context
+      const dialogueForAi = updatedMessages
+        .filter((m) => !m.isError)
+        .map((m) => ({
+          role: m.sender === 'user' ? ('user' as const) : ('assistant' as const),
+          text: m.text
+        }));
 
       const result = await runAgenticSportsScientistTurn(
         dialogueForAi,
@@ -160,16 +164,22 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
         setActiveDossier(result.dossier);
       }
       sounds.playTick();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Agentic turn error:", err);
+      const errMsg = err?.message || String(err);
       setMessages((prev) => [
         ...prev,
         {
           id: 'agent-err-' + Date.now(),
           sender: 'agent',
-          text: "C'est bien noté. Peux-tu me préciser également ton rythme de vie et tes disponibilités d'entraînement ?"
+          text: errMsg,
+          isError: true
         }
       ]);
+      // If error is about missing key or invalid key, open the key drawer immediately
+      if (errMsg.includes('AUCUNE_CLE') || errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('API key')) {
+        setIsKeyInputOpen(true);
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -282,7 +292,7 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-zinc-200 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Connexion directe Google Gemini (optionnelle)</span>
+                <span>Connexion Google Gemini (AI Studio)</span>
               </span>
               <a
                 href="https://aistudio.google.com/app/apikey"
@@ -320,12 +330,78 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
           </div>
         )}
 
+        {/* Prominent Banner when no API key is configured */}
+        {!geminiApiKey && !isKeyInputOpen && (
+          <div className="p-3 bg-amber-950/40 border-b border-amber-800/60 flex items-center justify-between text-xs text-amber-200 shrink-0">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Clé Google AI Studio requise pour dialoguer avec l'IA (zéro réponse simulée).</span>
+            </div>
+            <button
+              onClick={() => {
+                setKeyInputDraft(geminiApiKey);
+                setIsKeyInputOpen(true);
+              }}
+              className="px-2.5 py-1 bg-amber-900/60 hover:bg-amber-800 border border-amber-700 text-amber-100 rounded-lg text-[11px] font-semibold transition"
+            >
+              Renseigner la clé
+            </button>
+          </div>
+        )}
+
         {/* Main Body: Scrollable Dialogue & Dossier Card */}
         <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-3 pr-1 overscroll-contain">
           {/* Messages Stream */}
           <div className="space-y-3">
             {messages.map((msg) => {
               const isAgent = msg.sender === 'agent';
+              if (msg.isError) {
+                return (
+                  <div key={msg.id} className="flex flex-col items-start w-full animate-in fade-in duration-200">
+                    <div className="w-full max-w-full p-4 rounded-xl text-xs bg-red-950/40 border border-red-800/80 text-red-200 space-y-2.5">
+                      <div className="flex items-center gap-2 font-bold text-red-300">
+                        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                        <span>Échec de l'appel au modèle d'IA (Gemini)</span>
+                      </div>
+                      <p className="leading-relaxed font-mono text-[11px] text-red-200/90 whitespace-pre-line bg-red-950/70 p-2.5 rounded-lg border border-red-800/50">
+                        {msg.text}
+                      </p>
+                      <div className="pt-1 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setKeyInputDraft(geminiApiKey);
+                            setIsKeyInputOpen(true);
+                          }}
+                          className="px-3 py-1.5 bg-red-900/70 hover:bg-red-800 border border-red-700 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5"
+                        >
+                          <Key className="w-3.5 h-3.5" />
+                          <span>Configurer la clé API</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const lastUser = [...messages].reverse().find((m) => m.sender === 'user');
+                            if (lastUser) handleSendMessage(lastUser.text);
+                          }}
+                          className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg text-xs transition flex items-center gap-1.5"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Réessayer</span>
+                        </button>
+                        <a
+                          href="https://aistudio.google.com/app/apikey"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] text-red-300 underline ml-1 hover:text-white"
+                        >
+                          Créer une clé gratuite Google AI Studio
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div
                   key={msg.id}
