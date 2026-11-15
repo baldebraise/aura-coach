@@ -2,6 +2,7 @@ import { UserProfile, PlannedWorkoutSession, WeeklyScheduleItem, AIChatMessage }
 import { EXERCISES_DATABASE } from '../data/exercises';
 import { initializeFirebaseApp } from './firebase';
 import { getAI, getGenerativeModel } from 'firebase/ai';
+import { getActiveGeminiApiKey } from './agenticAssessment';
 
 // Fallback high-performance generator when offline or before Gemini API key is configured
 export function generateDefaultSchedule(profile: UserProfile): WeeklyScheduleItem[] {
@@ -177,17 +178,29 @@ export async function queryGeminiCoach(
 ): Promise<AIChatMessage> {
   const promptLower = userPrompt.toLowerCase();
 
-  // 1. If user is connected via Google, call Gemini directly via Firebase AI Logic (zero manual API key entry)
-  if (profile.isGoogleAuthenticated) {
+  // 1. Try Direct Google Gemini API (gemini-3.8-flash)
+  const apiKey = getActiveGeminiApiKey(profile);
+  if (apiKey) {
     try {
-      const { app } = initializeFirebaseApp();
-      if (app) {
-        const ai = getAI(app);
-        const model = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
-        const systemPrompt = `Tu es le conseiller scientifique et athlétique d'élite AURA. Réponds de façon concise, précise, encourageante, SANS AUCUN ÉMOJI. Profil athlète : ${profile.name}, ${profile.age} ans, ${profile.weightKg}kg, objectif: ${profile.primaryGoal}, blessures antérieures: ${profile.injuries.length > 0 ? profile.injuries.join(', ') : 'aucune'}. Salles disponibles: ${profile.gyms.map(g => g.name).join(', ')}. Question de l'athlète: ${userPrompt}`;
-
-        const response = await model.generateContent(systemPrompt);
-        const answerText = response?.response?.text();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const systemPrompt = `Tu es le conseiller scientifique et athlétique d'élite AURA. Réponds de façon concise, précise, encourageante, SANS AUCUN ÉMOJI. Profil athlète : ${profile.name || 'Athlète'}, ${profile.age || 28} ans, ${profile.weightKg || 75}kg, objectif: ${profile.primaryGoal || 'forme globale'}, blessures antérieures: ${profile.injuries && profile.injuries.length > 0 ? profile.injuries.join(', ') : 'aucune'}. Salles disponibles: ${profile.gyms ? profile.gyms.map(g => g.name).join(', ') : 'Maison'}. Question de l'athlète: ${userPrompt}`;
+      
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: systemPrompt }] }]
+          })
+        }
+      );
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        const answerText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (answerText && answerText.trim()) {
           let actionProposal: AIChatMessage['actionProposal'] = undefined;
           if (promptLower.includes('genou') || promptLower.includes('douleur')) {
@@ -218,7 +231,7 @@ export async function queryGeminiCoach(
         }
       }
     } catch (err: any) {
-      console.warn('Firebase AI Logic fallback to heuristic expert engine:', err.message);
+      console.warn('Direct Gemini call failed, trying fallback:', err);
     }
   }
 
