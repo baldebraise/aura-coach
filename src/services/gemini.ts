@@ -195,10 +195,13 @@ export async function queryGeminiCoach(
     const systemPrompt = `Tu es le conseiller scientifique et athlétique d'élite AURA. Réponds de façon concise, précise, encourageante, SANS AUCUN ÉMOJI. Profil athlète : ${profile.name || 'Athlète'}, ${profile.age || 28} ans, ${profile.weightKg || 75}kg, objectif: ${profile.primaryGoal || 'forme globale'}, blessures antérieures: ${profile.injuries && profile.injuries.length > 0 ? profile.injuries.join(', ') : 'aucune'}. Salles disponibles: ${profile.gyms ? profile.gyms.map(g => g.name).join(', ') : 'Maison'}. Question de l'athlète: ${userPrompt}`;
     
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey.trim()
+        },
         signal: controller.signal,
         body: JSON.stringify({
           contents: [{ parts: [{ text: systemPrompt }] }]
