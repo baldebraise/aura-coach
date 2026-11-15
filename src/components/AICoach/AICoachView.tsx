@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, AIChatMessage, WeeklyScheduleItem } from '../../types';
 import { queryGeminiCoach } from '../../services/gemini';
 import { sounds } from '../../utils/audio';
@@ -50,6 +50,16 @@ export const AICoachView: React.FC<AICoachViewProps> = ({
 
   const [input, setInput] = useState<string>('');
   const [isThinking, setIsThinking] = useState<boolean>(false);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isThinking]);
 
   const quickPrompts = [
     'J ai une gêne au genou aujourd hui',
@@ -104,7 +114,7 @@ export const AICoachView: React.FC<AICoachViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] max-w-lg mx-auto pb-4 animate-in fade-in duration-200">
+    <div className="flex flex-col h-[calc(100dvh-130px)] sm:h-[calc(100vh-140px)] max-h-[100dvh] max-w-lg mx-auto pb-4 overflow-hidden animate-in fade-in duration-200">
       {/* Header */}
       <div className="flex items-center justify-between py-2 border-b border-zinc-800 shrink-0 mb-3">
         <div className="flex items-center gap-2.5">
@@ -129,7 +139,7 @@ export const AICoachView: React.FC<AICoachViewProps> = ({
       </div>
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 overscroll-contain">
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';
 
@@ -192,6 +202,7 @@ export const AICoachView: React.FC<AICoachViewProps> = ({
             <span>Analyse biomécanique en cours...</span>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Quick Prompts Chips */}
@@ -220,6 +231,9 @@ export const AICoachView: React.FC<AICoachViewProps> = ({
           placeholder="Posez une question ou demandez un ajustement..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onFocus={() => {
+            setTimeout(scrollToBottom, 200);
+          }}
           className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
         />
         <button

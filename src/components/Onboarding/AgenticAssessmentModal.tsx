@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, EquipmentType, GymLocation } from '../../types';
 import { DEFAULT_GYMS } from '../../data/defaultGyms';
 import { initializeFirebaseApp } from '../../services/firebase';
@@ -209,6 +209,16 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
     confidence: 0
   }));
 
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isAnalyzing]);
+
   if (!isOpen) return null;
 
   const handleSendResponse = async () => {
@@ -318,7 +328,7 @@ Réponds en 2 à 3 phrases très professionnelles et encourageantes en français
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full sm:max-w-xl bg-zinc-950 border border-zinc-800 rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl flex flex-col h-[90vh] sm:h-[82vh]">
+      <div className="w-full sm:max-w-xl bg-zinc-950 border border-zinc-800 rounded-t-2xl sm:rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-col h-[100dvh] sm:h-[84vh] max-h-[100dvh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -344,7 +354,7 @@ Réponds en 2 à 3 phrases très professionnelles et encourageantes en français
         </div>
 
         {/* Conversation Stream */}
-        <div className="flex-1 overflow-y-auto space-y-3 py-3 pr-1">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-3 py-3 pr-1 overscroll-contain">
           {messages.map((msg) => {
             const isAgent = msg.sender === 'agent';
 
@@ -430,6 +440,7 @@ Réponds en 2 à 3 phrases très professionnelles et encourageantes en français
               </div>
             );
           })}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Text Input Area */}
@@ -439,6 +450,9 @@ Réponds en 2 à 3 phrases très professionnelles et encourageantes en français
               rows={2}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              onFocus={() => {
+                setTimeout(scrollToBottom, 200);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();

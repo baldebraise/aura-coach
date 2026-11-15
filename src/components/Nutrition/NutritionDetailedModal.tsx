@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, DailyHabits } from '../../types';
 import { calculateNutritionTargets, analyzeMealAgentically } from '../../services/nutrition';
 import { sounds } from '../../utils/audio';
@@ -59,6 +59,18 @@ export const NutritionDetailedModal: React.FC<NutritionDetailedModalProps> = ({
       text: `Bonjour ${profile.name || 'Athlète'}. Décrivez-moi un repas en texte libre (ex: "200g de poulet, 150g de riz basmati, brocolis et 1 filet d'huile d'olive") ou posez-moi une question sur votre alimentation d'aujourd'hui. J'analyse vos apports sans formulaire rigide.`
     }
   ]);
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollChatToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    if (activeTab === 'assistant') {
+      scrollChatToBottom();
+    }
+  }, [chatLog, isAnalyzing, activeTab]);
 
   if (!isOpen) return null;
 
@@ -127,7 +139,7 @@ export const NutritionDetailedModal: React.FC<NutritionDetailedModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full sm:max-w-2xl bg-zinc-950 border border-zinc-800 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col h-[92vh] sm:h-[86vh] overflow-hidden">
+      <div className="w-full sm:max-w-2xl bg-zinc-950 border border-zinc-800 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col h-[100dvh] sm:h-[86vh] max-h-[100dvh] overflow-hidden">
         {/* Header */}
         <div className="px-5 py-4 border-b border-zinc-800/80 flex items-center justify-between shrink-0 bg-zinc-900/60">
           <div className="flex items-center gap-2.5">
@@ -358,8 +370,8 @@ export const NutritionDetailedModal: React.FC<NutritionDetailedModalProps> = ({
 
           {/* TAB 2: ASSISTANT EN TEXTE LIBRE */}
           {activeTab === 'assistant' && (
-            <div className="space-y-4 animate-in fade-in duration-150 flex flex-col h-full">
-              <div className="p-3 bg-zinc-900/50 border border-zinc-800 rounded-xl flex items-center gap-2.5">
+            <div className="space-y-3 animate-in fade-in duration-150 flex flex-col h-full min-h-0">
+              <div className="p-3 bg-zinc-900/50 border border-zinc-800 rounded-xl flex items-center gap-2.5 shrink-0">
                 <Bot className="w-4 h-4 text-emerald-400 shrink-0" />
                 <p className="text-xs text-zinc-300">
                   Décrivez vos repas avec vos propres mots. L'agent analyse les nutriments, compare à vos cibles ({targets.calories} kcal • {targets.proteinGrams}g P) et formule des ajustements pratiques.
@@ -367,7 +379,7 @@ export const NutritionDetailedModal: React.FC<NutritionDetailedModalProps> = ({
               </div>
 
               {/* Chat Stream */}
-              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 overscroll-contain">
                 {chatLog.map((msg) => (
                   <div
                     key={msg.id}
@@ -424,15 +436,19 @@ export const NutritionDetailedModal: React.FC<NutritionDetailedModalProps> = ({
                     )}
                   </div>
                 ))}
+                <div ref={chatEndRef} />
               </div>
 
               {/* Input Form */}
-              <div className="pt-2">
+              <div className="pt-2 shrink-0">
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
+                    onFocus={() => {
+                      setTimeout(scrollChatToBottom, 200);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleSendMealAnalysis();
                     }}
