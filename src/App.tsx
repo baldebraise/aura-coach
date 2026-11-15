@@ -376,8 +376,36 @@ export const App: React.FC = () => {
 
   // Agentic Assessment Completion Handler
   const handleSaveAgenticAssessment = (updatedProfile: UserProfile) => {
+    let baselineTestsUpdated = updatedProfile.baselineTests || profile?.baselineTests || [];
+
+    if (updatedProfile.athleticDossier?.baselineTrackingMetrics) {
+      const bMetrics = updatedProfile.athleticDossier.baselineTrackingMetrics;
+      if (bMetrics.initialWeightKg) {
+        setDailyHabits((prev) => ({
+          ...prev,
+          weightKg: bMetrics.initialWeightKg
+        }));
+      }
+      if (bMetrics.initialBenchmarkValue && bMetrics.initialBenchmarkMetricName) {
+        const initialBenchmark: PhysicalTestMetric = {
+          id: 'test-upper',
+          name: bMetrics.initialBenchmarkMetricName,
+          category: 'strength',
+          unit: bMetrics.initialBenchmarkUnit || 'reps',
+          value: bMetrics.initialBenchmarkValue,
+          date: new Date().toISOString(),
+          instructions: 'Initialisé lors du bilan agentique de cadrage'
+        };
+        baselineTestsUpdated = [
+          ...baselineTestsUpdated.filter((t) => t.id !== 'test-upper'),
+          initialBenchmark
+        ];
+      }
+    }
+
     const mergedProfile: UserProfile = {
       ...updatedProfile,
+      baselineTests: baselineTestsUpdated,
       id: profile?.id || updatedProfile.id || 'athlete-user',
       name: profile?.name || updatedProfile.name || 'Athlète',
       isGoogleAuthenticated: !!profile?.isGoogleAuthenticated,

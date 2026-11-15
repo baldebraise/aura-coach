@@ -69,6 +69,62 @@ export interface GoogleAuthUser {
   photoURL: string | null;
 }
 
+export interface RecommendedTestPlan {
+  id: string; // 'test-upper' | 'test-lower' | 'test-cardio' | 'test-core'
+  name: string;
+  targetMetric: string; // e.g. "Répétitions max strictes", "Charge 1RM (kg)", "VMA (km/h)"
+  rationale: string;
+}
+
+export interface TrainingPlanOption {
+  title: string;
+  splitType: string;
+  frequencyDays: number;
+  description: string;
+}
+
+export interface PlannedSessionDraft {
+  title: string;
+  focus: string;
+  durationMin: number;
+  exercisesPreview: string[];
+}
+
+export interface AgenticAthleticDossier {
+  physicalConditionSummary: string;
+  recommendedTests: RecommendedTestPlan[];
+  shortTermGoals: string;
+  longTermGoals: string;
+  expectedOutcomes: string;
+  trainingPlanDraft: {
+    splitName: string;
+    rationale: string;
+    options: TrainingPlanOption[];
+    sessions: PlannedSessionDraft[];
+  };
+  nutritionLifestyleDraft: {
+    dailyCaloriesTarget: number;
+    proteinGramsTarget: number;
+    waterLitersTarget: number;
+    nutritionStrategy: string;
+    lifestylePillars: string[];
+  };
+  missingDataAndReserves: Array<{
+    missingPoint: string;
+    howToObtain: string;
+  }>;
+  baselineTrackingMetrics: {
+    initialWeightKg?: number;
+    initialHeightCm?: number;
+    initialAge?: number;
+    initialBenchmarkMetricName?: string;
+    initialBenchmarkValue?: number;
+    initialBenchmarkUnit?: string;
+  };
+  confidenceScore: number;
+  isReadyForValidation: boolean;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -90,6 +146,7 @@ export interface UserProfile {
   googleUser?: GoogleAuthUser | null;
   onboardingCompleted: boolean;
   assessmentRawText?: string;
+  athleticDossier?: AgenticAthleticDossier;
 }
 
 export interface PlannedExercise {

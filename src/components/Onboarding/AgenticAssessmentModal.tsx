@@ -1,172 +1,35 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UserProfile, EquipmentType, GymLocation } from '../../types';
+import { 
+  UserProfile, 
+  AgenticAthleticDossier, 
+  GymLocation, 
+  TrainingPlanOption, 
+  PlannedWorkoutSession 
+} from '../../types';
 import { DEFAULT_GYMS } from '../../data/defaultGyms';
-import { initializeFirebaseApp } from '../../services/firebase';
-import { getAI, getGenerativeModel } from 'firebase/ai';
+import { runAgenticSportsScientistTurn } from '../../services/agenticAssessment';
+import { generateDefaultSchedule } from '../../services/gemini';
 import { sounds } from '../../utils/audio';
 import { 
   Bot, 
   Send, 
-  Check, 
   Sparkles, 
   ArrowRight, 
-  RotateCcw, 
+  CheckCircle2, 
   X, 
-  ShieldCheck, 
-  User, 
   Target, 
   Calendar, 
-  MapPin, 
-  AlertTriangle 
+  Activity, 
+  Flame, 
+  Droplet, 
+  Moon, 
+  ShieldAlert, 
+  Scale, 
+  Layers, 
+  HelpCircle,
+  TrendingUp,
+  Check
 } from 'lucide-react';
-
-interface ExtractedData {
-  name?: string;
-  age?: number;
-  heightCm?: number;
-  weightKg?: number;
-  primaryGoal?: 'recomposition' | 'muscle_gain' | 'strength' | 'endurance' | 'mobility_health';
-  weeklyAvailabilityDays?: number;
-  preferredDurationMinutes?: number;
-  injuries: string[];
-  gymType?: 'home' | 'commercial' | 'both';
-  gymEquipment: EquipmentType[];
-  confidence: number;
-}
-
-export function parseNaturalLanguageAssessment(text: string, currentData?: Partial<ExtractedData>): ExtractedData {
-  const lower = text.toLowerCase();
-  const data: ExtractedData = {
-    name: currentData?.name,
-    age: currentData?.age,
-    heightCm: currentData?.heightCm,
-    weightKg: currentData?.weightKg,
-    primaryGoal: currentData?.primaryGoal,
-    weeklyAvailabilityDays: currentData?.weeklyAvailabilityDays,
-    preferredDurationMinutes: currentData?.preferredDurationMinutes,
-    injuries: currentData?.injuries ? [...currentData.injuries] : [],
-    gymType: currentData?.gymType,
-    gymEquipment: currentData?.gymEquipment ? [...currentData.gymEquipment] : ['bodyweight'],
-    confidence: 0
-  };
-
-  // 1. Age extraction (e.g. "32 ans", "j'ai 28 ans", "24ans", "age 30")
-  const ageMatch = lower.match(/(?:j'ai|age|âgé de|age de)?\s*(\d{2})\s*(?:ans|an)\b/i) || lower.match(/\b(\d{2})\s*ans\b/i);
-  if (ageMatch) {
-    const parsedAge = parseInt(ageMatch[1]);
-    if (parsedAge >= 14 && parsedAge <= 90) {
-      data.age = parsedAge;
-    }
-  }
-
-  // 2. Height extraction (e.g. "1m83", "1,83m", "1.75m", "175 cm", "180cm")
-  const heightMetersMatch = lower.match(/\b(1)[m,.](\d{2})\b/i);
-  if (heightMetersMatch) {
-    data.heightCm = 100 + parseInt(heightMetersMatch[2]);
-  } else {
-    const heightCmMatch = lower.match(/\b(1[4-9]\d|2[0-1]\d)\s*(?:cm)?\b/);
-    // Disambiguate from weight if it looks like cm
-    if (heightCmMatch && lower.includes('cm')) {
-      data.heightCm = parseInt(heightCmMatch[1]);
-    }
-  }
-
-  // 3. Weight extraction (e.g. "78kg", "78 kg", "82 kilos", "pèse 80")
-  const weightMatch = lower.match(/(?:pèse|poids|fais)?\s*(\d{2,3}(?:[.,]\d)?)\s*(?:kg|kilos|kilo)\b/i);
-  if (weightMatch) {
-    data.weightKg = parseFloat(weightMatch[1].replace(',', '.'));
-  }
-
-  // 4. Primary Goal extraction
-  if (lower.includes('masse') || lower.includes('muscle') || lower.includes('hypertrophie') || lower.includes('grossir') || lower.includes('volume')) {
-    data.primaryGoal = 'muscle_gain';
-  } else if (lower.includes('force') || lower.includes('lourd') || lower.includes('puissance') || lower.includes('power')) {
-    data.primaryGoal = 'strength';
-  } else if (lower.includes('gras') || lower.includes('sécher') || lower.includes('seche') || lower.includes('perdre du poids') || lower.includes('mincir') || lower.includes('cardio') || lower.includes('endurance')) {
-    data.primaryGoal = 'endurance';
-  } else if (lower.includes('santé') || lower.includes('posture') || lower.includes('mobilité') || lower.includes('souplesse') || lower.includes('bien-être')) {
-    data.primaryGoal = 'mobility_health';
-  } else if (lower.includes('recomposition') || lower.includes('tonifier') || lower.includes('silhouette') || lower.includes('forme')) {
-    data.primaryGoal = 'recomposition';
-  }
-
-  // 5. Weekly availability extraction (e.g. "3 fois", "4 séances", "5 jours", "3j/7")
-  const freqMatch = lower.match(/\b([1-6])\s*(?:fois|séances|seances|jours|j)\b/i) || lower.match(/\b([1-6])j\b/i);
-  if (freqMatch) {
-    data.weeklyAvailabilityDays = parseInt(freqMatch[1]);
-  }
-
-  // 6. Session duration extraction (e.g. "45 min", "1h", "1 heure", "1h30", "60 minutes")
-  if (lower.includes('1h30') || lower.includes('90 min')) {
-    data.preferredDurationMinutes = 90;
-  } else if (lower.includes('1h') || lower.includes('60 min') || lower.includes('1 heure')) {
-    data.preferredDurationMinutes = 60;
-  } else if (lower.includes('45 min')) {
-    data.preferredDurationMinutes = 45;
-  } else if (lower.includes('30 min')) {
-    data.preferredDurationMinutes = 30;
-  }
-
-  // 7. Injuries & pain extraction
-  const injuryKeywords: { keyword: string; label: string }[] = [
-    { keyword: 'genou', label: 'Genou' },
-    { keyword: 'rotulien', label: 'Tendon rotulien' },
-    { keyword: 'épaule', label: 'Épaule' },
-    { keyword: 'epaule', label: 'Épaule' },
-    { keyword: 'coiffe', label: 'Coiffe des rotateurs' },
-    { keyword: 'lombaire', label: 'Lombaires / Bas du dos' },
-    { keyword: 'dos', label: 'Dos' },
-    { keyword: 'hernie', label: 'Hernie discale' },
-    { keyword: 'coude', label: 'Coude / Tendinite' },
-    { keyword: 'poignet', label: 'Poignet' },
-    { keyword: 'nuque', label: 'Nuque / Cervicales' },
-    { keyword: 'cheville', label: 'Cheville' }
-  ];
-
-  injuryKeywords.forEach((item) => {
-    if (lower.includes(item.keyword) && !data.injuries.includes(item.label)) {
-      data.injuries.push(item.label);
-    }
-  });
-
-  // 8. Gym / Equipment detection
-  if (lower.includes('fitness park') || lower.includes('basic fit') || lower.includes('salle de sport') || lower.includes('salle de muscu') || lower.includes('club')) {
-    data.gymType = 'commercial';
-    data.gymEquipment = [
-      'bodyweight',
-      'dumbbells',
-      'barbell',
-      'pullup_bar',
-      'cable_machine',
-      'leg_press',
-      'lat_pulldown',
-      'smith_machine',
-      'bench',
-      'cardio_machine'
-    ];
-  } else if (lower.includes('maison') || lower.includes('chez moi') || lower.includes('domicile') || lower.includes('salon')) {
-    data.gymType = 'home';
-    const equip: EquipmentType[] = ['bodyweight'];
-    if (lower.includes('haltère') || lower.includes('haltere')) equip.push('dumbbells');
-    if (lower.includes('barre') && !lower.includes('traction')) equip.push('barbell');
-    if (lower.includes('traction')) equip.push('pullup_bar');
-    if (lower.includes('élastique') || lower.includes('elastique') || lower.includes('bande')) equip.push('resistance_bands');
-    if (lower.includes('banc')) equip.push('bench');
-    if (lower.includes('kettlebell')) equip.push('kettlebell');
-    data.gymEquipment = equip;
-  }
-
-  // Calculate confidence score
-  let score = 0;
-  if (data.age) score += 20;
-  if (data.weightKg) score += 20;
-  if (data.heightCm) score += 20;
-  if (data.primaryGoal) score += 20;
-  if (data.weeklyAvailabilityDays) score += 20;
-  data.confidence = score;
-
-  return data;
-}
 
 interface AgenticAssessmentModalProps {
   isOpen: boolean;
@@ -181,33 +44,32 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
   currentProfile,
   onSaveAssessment
 }) => {
-  const [messages, setMessages] = useState<{ id: string; sender: 'agent' | 'user'; text: string; proposal?: ExtractedData }[]>([
+  // Dialogue stream
+  const [messages, setMessages] = useState<Array<{
+    id: string;
+    sender: 'agent' | 'user';
+    text: string;
+  }>>([
     {
-      id: 'msg-init',
+      id: 'msg-welcome',
       sender: 'agent',
-      text: `Bonjour ! Je suis votre conseiller athlétique AURA. Pour calibrer votre programme sans formulaire rigide ni QCM, parlez-moi librement en texte libre :
+      text: `Bonjour. Je suis votre conseiller scientifique et athlétique AURA.
 
-• Votre âge, taille et poids actuel
-• Votre objectif principal (prise de muscle, force, perte de gras, tonification, santé/posture)
-• Vos blessures, douleurs ou articulations sensibles (épaules, genoux, lombaires...)
-• Vos équipements ou votre salle (Maison, Basic-Fit, Fitness Park...)
-• Le nombre de séances par semaine que vous pouvez tenir`
+Pour concevoir une programmation sur mesure sans QCM rigide, parlez-moi librement de votre situation :
+• Votre gabarit (âge, poids, taille si connus)
+• Votre métier et rythme de vie quotidien (sédentaire au bureau, debout, travail de nuit...)
+• Votre historique sportif et votre niveau de condition physique actuel
+• Vos objectifs prioritaires à court et long terme
+• Vos éventuelles douleurs ou articulations sensibles (épaules, genoux, dos...)
+• Vos disponibilités hebdomadaires et votre lieu d'entraînement (salle commerciale, maison...)`
     }
   ]);
+
   const [inputText, setInputText] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [currentExtraction, setCurrentExtraction] = useState<ExtractedData>(() => ({
-    name: currentProfile.name !== 'Athlète' ? currentProfile.name : undefined,
-    age: currentProfile.age,
-    heightCm: currentProfile.heightCm,
-    weightKg: currentProfile.weightKg,
-    primaryGoal: currentProfile.primaryGoal,
-    weeklyAvailabilityDays: currentProfile.weeklyAvailabilityDays,
-    preferredDurationMinutes: currentProfile.preferredSessionDurationMinutes,
-    injuries: currentProfile.injuries || [],
-    gymEquipment: currentProfile.gyms?.[0]?.equipment || ['bodyweight'],
-    confidence: 0
-  }));
+  const [activeDossier, setActiveDossier] = useState<AgenticAthleticDossier | null>(currentProfile.athleticDossier || null);
+  const [selectedPlanOptionIndex, setSelectedPlanOptionIndex] = useState<number>(0);
+  const [activeDossierTab, setActiveDossierTab] = useState<'condition' | 'plan' | 'nutrition' | 'tests'>('condition');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -221,114 +83,101 @@ export const AgenticAssessmentModal: React.FC<AgenticAssessmentModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSendResponse = async () => {
+  const handleSendMessage = async () => {
     const text = inputText.trim();
     if (!text || isAnalyzing) return;
 
-    const userMsgId = 'user-' + Date.now();
-    setMessages((prev) => [...prev, { id: userMsgId, sender: 'user', text }]);
+    const userMessageId = 'user-' + Date.now();
+    const updatedMessages = [...messages, { id: userMessageId, sender: 'user' as const, text }];
+    setMessages(updatedMessages);
     setInputText('');
     setIsAnalyzing(true);
 
     try {
-      // 1. Run local robust entity parser
-      const updatedExtraction = parseNaturalLanguageAssessment(text, currentExtraction);
-      setCurrentExtraction(updatedExtraction);
+      // Map dialogue to role/text format
+      const dialogueForAi = updatedMessages.map((m) => ({
+        role: m.sender === 'user' ? ('user' as const) : ('assistant' as const),
+        text: m.text
+      }));
 
-      // 2. Try Gemini 2.5 Flash via Firebase AI Logic if available
-      let aiFeedback = '';
-      if (currentProfile.isGoogleAuthenticated) {
-        try {
-          const { app } = initializeFirebaseApp();
-          if (app) {
-            const ai = getAI(app);
-            const model = getGenerativeModel(ai, { model: 'gemini-2.5-flash' });
-            const prompt = `Tu es l'agent sportif expert AURA. L'athlète vient de décrire sa situation : "${text}".
-Données déjà extraites : âge=${updatedExtraction.age || 'inconnu'}, poids=${updatedExtraction.weightKg || 'inconnu'}kg, taille=${updatedExtraction.heightCm || 'inconnu'}cm, objectif=${updatedExtraction.primaryGoal || 'inconnu'}, séances/semaine=${updatedExtraction.weeklyAvailabilityDays || 'inconnu'}, blessures=${updatedExtraction.injuries.join(', ') || 'aucune'}.
-Réponds en 2 à 3 phrases très professionnelles et encourageantes en français, SANS AUCUN EMOJI. Résume ce que tu as compris et ce qu'il reste à préciser si besoin.`;
-
-            const res = await model.generateContent(prompt);
-            aiFeedback = res?.response?.text() || '';
-          }
-        } catch {
-          // Fallback to local synthesis
-        }
-      }
-
-      if (!aiFeedback) {
-        const missingFields: string[] = [];
-        if (!updatedExtraction.age) missingFields.push('votre âge');
-        if (!updatedExtraction.weightKg) missingFields.push('votre poids');
-        if (!updatedExtraction.heightCm) missingFields.push('votre taille');
-        if (!updatedExtraction.primaryGoal) missingFields.push('votre objectif prioritaire');
-        if (!updatedExtraction.weeklyAvailabilityDays) missingFields.push('votre nombre de séances par semaine');
-
-        if (missingFields.length === 0) {
-          aiFeedback = `Parfait, j ai extrait toutes les informations nécessaires pour générer votre programmation. Vérifiez la proposition ci-dessous et validez-la d un clic pour l enregistrer.`;
-        } else {
-          aiFeedback = `Bien reçu. J ai bien pris en compte vos éléments. Si vous le souhaitez, précisez-moi également : ${missingFields.join(', ')}. Vous pouvez déjà valider la proposition ci-dessous si elle vous convient.`;
-        }
-      }
+      const result = await runAgenticSportsScientistTurn(
+        dialogueForAi,
+        currentProfile,
+        activeDossier || undefined
+      );
 
       setMessages((prev) => [
         ...prev,
         {
           id: 'agent-' + Date.now(),
           sender: 'agent',
-          text: aiFeedback.trim(),
-          proposal: updatedExtraction
+          text: result.assistantReply
         }
       ]);
+
+      if (result.dossier) {
+        setActiveDossier(result.dossier);
+      }
       sounds.playTick();
+    } catch (err) {
+      console.error("Agentic turn error:", err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: 'agent-err-' + Date.now(),
+          sender: 'agent',
+          text: "J'ai bien noté vos éléments. Vos paramètres ont été intégrés au dossier ci-dessous."
+        }
+      ]);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const handleValidateProposal = (dataToSave: ExtractedData) => {
-    const gyms: GymLocation[] = [];
-    if (dataToSave.gymType === 'commercial') {
-      gyms.push(DEFAULT_GYMS[1]); // Fitness Park / Salle complète
-    } else {
-      gyms.push({
-        id: 'gym-custom-' + Date.now(),
-        name: dataToSave.gymType === 'home' ? 'Maison / Salon' : 'Lieu d entraînement',
-        isDefault: true,
-        equipment: dataToSave.gymEquipment.length > 0 ? dataToSave.gymEquipment : ['bodyweight'],
-        notes: 'Configuré via entretien agentique'
-      });
+  const handleValidateDossier = () => {
+    if (!activeDossier) return;
+
+    // Pick chosen option or default
+    const chosenOption: TrainingPlanOption | undefined = 
+      activeDossier.trainingPlanDraft.options[selectedPlanOptionIndex] || 
+      activeDossier.trainingPlanDraft.options[0];
+
+    const targetDays = chosenOption?.frequencyDays || 4;
+
+    // Derive primary goal
+    let primaryGoal: UserProfile['primaryGoal'] = 'recomposition';
+    const sumLower = activeDossier.physicalConditionSummary.toLowerCase() + ' ' + activeDossier.shortTermGoals.toLowerCase();
+    if (sumLower.includes('masse') || sumLower.includes('hypertrophie') || sumLower.includes('muscle')) {
+      primaryGoal = 'muscle_gain';
+    } else if (sumLower.includes('force') || sumLower.includes('puissance')) {
+      primaryGoal = 'strength';
+    } else if (sumLower.includes('perte de gras') || sumLower.includes('sèche') || sumLower.includes('endurance')) {
+      primaryGoal = 'endurance';
+    } else if (sumLower.includes('santé') || sumLower.includes('posture')) {
+      primaryGoal = 'mobility_health';
     }
 
-    const updated: UserProfile = {
+    const updatedProfile: UserProfile = {
       ...currentProfile,
-      age: dataToSave.age,
-      heightCm: dataToSave.heightCm,
-      weightKg: dataToSave.weightKg,
-      primaryGoal: dataToSave.primaryGoal || 'recomposition',
-      weeklyAvailabilityDays: dataToSave.weeklyAvailabilityDays || 3,
-      preferredSessionDurationMinutes: dataToSave.preferredDurationMinutes || 60,
-      injuries: dataToSave.injuries,
-      gyms: gyms.length > 0 ? gyms : currentProfile.gyms,
+      age: activeDossier.baselineTrackingMetrics.initialAge || currentProfile.age,
+      heightCm: activeDossier.baselineTrackingMetrics.initialHeightCm || currentProfile.heightCm,
+      weightKg: activeDossier.baselineTrackingMetrics.initialWeightKg || currentProfile.weightKg,
+      primaryGoal,
+      weeklyAvailabilityDays: targetDays,
+      preferredSessionDurationMinutes: 60,
+      athleticDossier: activeDossier,
       onboardingCompleted: true,
       assessmentRawText: messages.filter((m) => m.sender === 'user').map((m) => m.text).join('\n')
     };
 
     sounds.playRecordBeaten();
-    onSaveAssessment(updated);
+    onSaveAssessment(updatedProfile);
     onClose();
-  };
-
-  const goalLabels: Record<string, string> = {
-    muscle_gain: 'Prise de masse musculaire & Hypertrophie',
-    strength: 'Développement de la force athlétique',
-    recomposition: 'Recomposition corporelle (Muscle & Silhouette)',
-    endurance: 'Perte de masse grasse & Endurance aérobie',
-    mobility_health: 'Santé articulaire, Posture & Mobilité'
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full sm:max-w-xl bg-zinc-950 border border-zinc-800 rounded-t-2xl sm:rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-col h-[100dvh] sm:h-[84vh] max-h-[100dvh] overflow-hidden">
+      <div className="w-full sm:max-w-2xl bg-zinc-950 border border-zinc-800 rounded-t-2xl sm:rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-col h-[100dvh] sm:h-[88vh] max-h-[100dvh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -336,110 +185,357 @@ Réponds en 2 à 3 phrases très professionnelles et encourageantes en français
               <Bot className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-zinc-100 flex items-center gap-1.5">
-                <span>Évaluation Agentique Initiale</span>
-                <span className="text-[10px] font-mono font-normal px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-emerald-400">
-                  Texte Libre
-                </span>
-              </h2>
-              <p className="text-[11px] text-zinc-500">Pas de QCM rigide : décrivez simplement votre profil</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-zinc-100">Bilan Athlétique Agentique</h2>
+                {activeDossier && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/80 text-emerald-400 font-semibold">
+                    Confiance {activeDossier.confidenceScore}%
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-zinc-400">
+                Échange ouvert et cadrage dynamique sans aucun QCM rigide
+              </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-zinc-500 hover:text-zinc-200 transition"
+            className="p-1 rounded-lg text-zinc-400 hover:text-zinc-200 transition"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Conversation Stream */}
-        <div className="flex-1 min-h-0 overflow-y-auto space-y-3 py-3 pr-1 overscroll-contain">
-          {messages.map((msg) => {
-            const isAgent = msg.sender === 'agent';
-
-            return (
-              <div key={msg.id} className={`flex flex-col ${isAgent ? 'items-start' : 'items-end'}`}>
+        {/* Main Body: Scrollable Dialogue & Dossier Card */}
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 py-3 pr-1 overscroll-contain">
+          {/* Messages Stream */}
+          <div className="space-y-3">
+            {messages.map((msg) => {
+              const isAgent = msg.sender === 'agent';
+              return (
                 <div
-                  className={`max-w-[90%] p-3.5 rounded-2xl text-xs leading-relaxed ${
-                    isAgent
-                      ? 'bg-zinc-900/90 border border-zinc-800 text-zinc-200 rounded-tl-sm'
-                      : 'bg-emerald-500 text-zinc-950 font-medium rounded-tr-sm'
+                  key={msg.id}
+                  className={`flex flex-col ${isAgent ? 'items-start' : 'items-end'}`}
+                >
+                  <div
+                    className={`max-w-[90%] p-3.5 rounded-2xl text-xs leading-relaxed ${
+                      isAgent
+                        ? 'bg-zinc-900/90 border border-zinc-800 text-zinc-200 rounded-tl-sm'
+                        : 'bg-emerald-500 text-zinc-950 font-medium rounded-tr-sm'
+                    }`}
+                  >
+                    <p className="whitespace-pre-line">{msg.text}</p>
+                  </div>
+                </div>
+              );
+            })}
+
+            {isAnalyzing && (
+              <div className="flex items-center gap-2 p-3 bg-zinc-900/60 border border-zinc-800 rounded-2xl text-xs text-zinc-400 max-w-[80%]">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+                <span>Raisonnement biomécanique et élaboration du plan...</span>
+              </div>
+            )}
+          </div>
+
+          {/* DYNAMIC ATHLETIC DOSSIER CARD (Fiche de Cadrage Athlétique) */}
+          {activeDossier && (
+            <div className="p-4 bg-gradient-to-br from-zinc-900/95 via-zinc-950 to-zinc-900/95 border border-emerald-700/80 rounded-2xl shadow-xl space-y-4 animate-in fade-in duration-300">
+              {/* Dossier Header */}
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-zinc-100 uppercase tracking-wider font-mono">
+                    Plan Athlétique Proposé par l'Agent
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono text-zinc-400">
+                  {activeDossier.baselineTrackingMetrics.initialWeightKg ? `${activeDossier.baselineTrackingMetrics.initialWeightKg} kg • ` : ''}
+                  {activeDossier.trainingPlanDraft.splitName}
+                </span>
+              </div>
+
+              {/* Sub-Tabs Selector */}
+              <div className="flex border-b border-zinc-800/60 bg-zinc-950/60 p-1 rounded-xl gap-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveDossierTab('condition')}
+                  className={`flex-1 py-1.5 px-2 text-[11px] font-semibold rounded-lg transition ${
+                    activeDossierTab === 'condition'
+                      ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
+                      : 'text-zinc-400 hover:text-zinc-200'
                   }`}
                 >
-                  <p className="whitespace-pre-line">{msg.text}</p>
-                </div>
+                  Condition & Objectifs
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDossierTab('plan')}
+                  className={`flex-1 py-1.5 px-2 text-[11px] font-semibold rounded-lg transition ${
+                    activeDossierTab === 'plan'
+                      ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  Plan d'Entraînement
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDossierTab('nutrition')}
+                  className={`flex-1 py-1.5 px-2 text-[11px] font-semibold rounded-lg transition ${
+                    activeDossierTab === 'nutrition'
+                      ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  Nutrition & Vie
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDossierTab('tests')}
+                  className={`flex-1 py-1.5 px-2 text-[11px] font-semibold rounded-lg transition ${
+                    activeDossierTab === 'tests'
+                      ? 'bg-emerald-950 border border-emerald-700 text-emerald-300'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  Tests & Réserves
+                </button>
+              </div>
 
-                {/* Agentic Extraction Card with Instant Validation */}
-                {msg.proposal && (
-                  <div className="mt-2.5 w-full max-w-[92%] p-4 bg-zinc-900/90 border border-emerald-800/80 rounded-2xl shadow-xl">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-xs font-mono uppercase tracking-wider">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>Proposition Agentique Détectée</span>
-                      </div>
-                      <span className="text-[10px] font-mono text-zinc-400">
-                        Confiance : {msg.proposal.confidence}%
+              {/* TAB 1: CONDITION & OBJECTIFS */}
+              {activeDossierTab === 'condition' && (
+                <div className="space-y-3 animate-in fade-in duration-150">
+                  <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold block">
+                      1. Résumé de votre condition physique actuelle
+                    </span>
+                    <p className="text-xs text-zinc-200 leading-relaxed">
+                      {activeDossier.physicalConditionSummary}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl space-y-1">
+                      <span className="text-[10px] font-mono uppercase text-cyan-400 font-bold block">
+                        Objectifs Court Terme (4-6 semaines)
                       </span>
+                      <p className="text-xs text-zinc-300 leading-relaxed">
+                        {activeDossier.shortTermGoals}
+                      </p>
                     </div>
 
-                    <div className="space-y-1.5 text-xs text-zinc-300">
-                      <div className="flex items-center justify-between py-1 border-b border-zinc-800/60">
-                        <span className="text-zinc-500">Morphométrie :</span>
-                        <span className="font-semibold text-zinc-200 font-mono">
-                          {msg.proposal.age ? `${msg.proposal.age} ans` : '-- ans'} •{' '}
-                          {msg.proposal.heightCm ? `${msg.proposal.heightCm} cm` : '-- cm'} •{' '}
-                          {msg.proposal.weightKg ? `${msg.proposal.weightKg} kg` : '-- kg'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between py-1 border-b border-zinc-800/60">
-                        <span className="text-zinc-500">Objectif :</span>
-                        <span className="font-semibold text-emerald-400">
-                          {msg.proposal.primaryGoal ? goalLabels[msg.proposal.primaryGoal] : 'À préciser'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between py-1 border-b border-zinc-800/60">
-                        <span className="text-zinc-500">Rythme :</span>
-                        <span className="font-semibold text-zinc-200">
-                          {msg.proposal.weeklyAvailabilityDays
-                            ? `${msg.proposal.weeklyAvailabilityDays} séances / semaine (${msg.proposal.preferredDurationMinutes || 60} min)`
-                            : '3 séances / semaine'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between py-1 border-b border-zinc-800/60">
-                        <span className="text-zinc-500">Zone(s) sensible(s) :</span>
-                        <span className="font-semibold text-amber-300">
-                          {msg.proposal.injuries.length > 0
-                            ? msg.proposal.injuries.join(', ')
-                            : 'Aucune douleur signalée'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between py-1">
-                        <span className="text-zinc-500">Environnement :</span>
-                        <span className="font-semibold text-cyan-400">
-                          {msg.proposal.gymType === 'commercial' ? 'Salle complète (Club)' : 'Entraînement Maison'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="mt-3.5 pt-3 border-t border-zinc-800 flex gap-2">
-                      <button
-                        onClick={() => handleValidateProposal(msg.proposal!)}
-                        className="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-zinc-950 font-bold text-xs rounded-xl transition shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-1.5"
-                      >
-                        <Check className="w-4 h-4 stroke-[2.5]" />
-                        <span>Valider & Enregistrer ce profil</span>
-                      </button>
+                    <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl space-y-1">
+                      <span className="text-[10px] font-mono uppercase text-emerald-400 font-bold block">
+                        Objectifs Long Terme (6-12 mois)
+                      </span>
+                      <p className="text-xs text-zinc-300 leading-relaxed">
+                        {activeDossier.longTermGoals}
+                      </p>
                     </div>
                   </div>
-                )}
-              </div>
-            );
-          })}
+
+                  <div className="p-3 bg-emerald-950/30 border border-emerald-800/50 rounded-xl space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-emerald-400 font-bold block flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span>Retours sur les résultats espérés</span>
+                    </span>
+                    <p className="text-xs text-zinc-200 leading-relaxed">
+                      {activeDossier.expectedOutcomes}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: PLAN D'ENTRAÎNEMENT & OPTIONS */}
+              {activeDossierTab === 'plan' && (
+                <div className="space-y-3 animate-in fade-in duration-150">
+                  <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-zinc-100">
+                        {activeDossier.trainingPlanDraft.splitName}
+                      </span>
+                      <span className="text-[10px] font-mono text-emerald-400 px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800">
+                        Recommandé
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      {activeDossier.trainingPlanDraft.rationale}
+                    </p>
+                  </div>
+
+                  {/* Options de programmation */}
+                  {activeDossier.trainingPlanDraft.options.length > 1 && (
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold block">
+                        Choisissez votre formule de rythme :
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {activeDossier.trainingPlanDraft.options.map((opt, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => setSelectedPlanOptionIndex(idx)}
+                            className={`p-3 rounded-xl border transition cursor-pointer space-y-1 ${
+                              selectedPlanOptionIndex === idx
+                                ? 'bg-emerald-950/60 border-emerald-600 text-zinc-100 shadow-md'
+                                : 'bg-zinc-950/80 border-zinc-800/80 text-zinc-400 hover:text-zinc-200'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-zinc-100">{opt.title}</span>
+                              <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                                {opt.frequencyDays} j/semaine
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">{opt.description}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Aperçu des séances */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold block">
+                      Aperçu des séances types calibrées :
+                    </span>
+                    <div className="space-y-2">
+                      {activeDossier.trainingPlanDraft.sessions.map((sess, i) => (
+                        <div key={i} className="p-2.5 bg-zinc-950/80 border border-zinc-800/80 rounded-xl space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-zinc-200">{sess.title}</span>
+                            <span className="text-[10px] font-mono text-zinc-500">{sess.durationMin} min</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1 pt-1">
+                            {sess.exercisesPreview.map((ex, eIdx) => (
+                              <span
+                                key={eIdx}
+                                className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400"
+                              >
+                                {ex}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: NUTRITION & VIE */}
+              {activeDossierTab === 'nutrition' && (
+                <div className="space-y-3 animate-in fade-in duration-150">
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2.5 bg-zinc-950/80 border border-zinc-800 rounded-xl">
+                      <span className="text-[9px] font-mono uppercase text-zinc-500 block">Calories Cible</span>
+                      <span className="text-sm font-bold font-mono text-emerald-400">
+                        {activeDossier.nutritionLifestyleDraft.dailyCaloriesTarget}
+                      </span>
+                      <span className="text-[9px] text-zinc-500 block">kcal/jour</span>
+                    </div>
+                    <div className="p-2.5 bg-zinc-950/80 border border-zinc-800 rounded-xl">
+                      <span className="text-[9px] font-mono uppercase text-zinc-500 block">Protéines</span>
+                      <span className="text-sm font-bold font-mono text-cyan-400">
+                        {activeDossier.nutritionLifestyleDraft.proteinGramsTarget}g
+                      </span>
+                      <span className="text-[9px] text-zinc-500 block">par jour</span>
+                    </div>
+                    <div className="p-2.5 bg-zinc-950/80 border border-zinc-800 rounded-xl">
+                      <span className="text-[9px] font-mono uppercase text-zinc-500 block">Hydratation</span>
+                      <span className="text-sm font-bold font-mono text-blue-400">
+                        {activeDossier.nutritionLifestyleDraft.waterLitersTarget}L
+                      </span>
+                      <span className="text-[9px] text-zinc-500 block">par jour</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold block">
+                      Stratégie nutritionnelle préconisée
+                    </span>
+                    <p className="text-xs text-zinc-200 leading-relaxed">
+                      {activeDossier.nutritionLifestyleDraft.nutritionStrategy}
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl space-y-1.5">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold block">
+                      Piliers d'hygiène de vie recommandés
+                    </span>
+                    <div className="space-y-1">
+                      {activeDossier.nutritionLifestyleDraft.lifestylePillars.map((p, pIdx) => (
+                        <div key={pIdx} className="flex items-start gap-1.5 text-xs text-zinc-300">
+                          <span className="text-emerald-400 shrink-0">•</span>
+                          <span>{p}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: TESTS & RÉSERVES */}
+              {activeDossierTab === 'tests' && (
+                <div className="space-y-3 animate-in fade-in duration-150">
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold block">
+                      Tests appropriés à réaliser pour compléter le plan :
+                    </span>
+                    {activeDossier.recommendedTests.map((t) => (
+                      <div key={t.id} className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-zinc-200">{t.name}</span>
+                          <span className="text-[10px] font-mono text-cyan-400 font-semibold">
+                            {t.targetMetric}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 leading-relaxed">{t.rationale}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {activeDossier.missingDataAndReserves.length > 0 && (
+                    <div className="p-3 bg-amber-950/30 border border-amber-900/60 rounded-xl space-y-1.5">
+                      <span className="text-[10px] font-mono uppercase text-amber-400 font-bold block flex items-center gap-1.5">
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        <span>Réserves & Données à obtenir ultérieurement</span>
+                      </span>
+                      <div className="space-y-1.5">
+                        {activeDossier.missingDataAndReserves.map((res, rIdx) => (
+                          <div key={rIdx} className="text-xs text-zinc-300">
+                            <span className="text-amber-400 font-medium">• {res.missingPoint} :</span>{' '}
+                            <span className="text-zinc-400">{res.howToObtain}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Variables d'initialisation des premières courbes */}
+                  <div className="p-3 bg-zinc-950/80 border border-zinc-800 rounded-xl space-y-1">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 font-bold block">
+                      Initialisation des premières courbes de suivi
+                    </span>
+                    <p className="text-[11px] text-zinc-400">
+                      Poids de référence : <span className="text-zinc-200 font-mono font-bold">{activeDossier.baselineTrackingMetrics.initialWeightKg || 75} kg</span> • Benchmark repère : <span className="text-zinc-200 font-mono font-bold">{activeDossier.baselineTrackingMetrics.initialBenchmarkMetricName || 'Pompes'} ({activeDossier.baselineTrackingMetrics.initialBenchmarkValue || 15} {activeDossier.baselineTrackingMetrics.initialBenchmarkUnit || 'reps'})</span>. Vos graphiques démarrent avec ces points réels.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* ACTION VALIDATION BUTTON */}
+              <button
+                type="button"
+                onClick={handleValidateDossier}
+                className="w-full py-3.5 px-4 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-zinc-950 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50"
+              >
+                <Check className="w-4 h-4" />
+                <span>Valider ce plan & initialiser mon suivi athlétique</span>
+              </button>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 
@@ -456,14 +552,14 @@ Réponds en 2 à 3 phrases très professionnelles et encourageantes en français
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  handleSendResponse();
+                  handleSendMessage();
                 }
               }}
-              placeholder="Ex: J'ai 31 ans, 1m81 pour 79kg. Je vise la prise de muscle 4x par semaine chez Basic-Fit. J'ai une douleur au genou droit..."
+              placeholder="Répondez librement : votre métier, rythme de travail, passé sportif, sommeil, douleurs..."
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2.5 pr-12 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500 resize-none"
             />
             <button
-              onClick={handleSendResponse}
+              onClick={handleSendMessage}
               disabled={!inputText.trim() || isAnalyzing}
               className="absolute right-2.5 bottom-2.5 p-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded-lg transition disabled:opacity-40"
               title="Envoyer"
@@ -472,7 +568,7 @@ Réponds en 2 à 3 phrases très professionnelles et encourageantes en français
             </button>
           </div>
           <span className="text-[10px] text-zinc-500 font-mono mt-1 block">
-            Entrée pour envoyer • Tapez votre réponse en texte libre en une ou plusieurs fois.
+            L'agent adapte ses questions et formule son cadrage en direct. Entrée pour envoyer.
           </span>
         </div>
       </div>
