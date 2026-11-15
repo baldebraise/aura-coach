@@ -6,10 +6,10 @@ import { MapPin, Plus, Check, AlertCircle, Dumbbell } from 'lucide-react';
 
 interface GymPreWorkoutModalProps {
   gyms: GymLocation[];
-  session: PlannedWorkoutSession;
+  session?: PlannedWorkoutSession;
   isOpen: boolean;
   onClose: () => void;
-  onConfirmStart: (selectedGym: GymLocation, adaptedSession: PlannedWorkoutSession) => void;
+  onConfirmStart: (selectedGym: GymLocation, adaptedSession?: PlannedWorkoutSession) => void;
   onAddNewGym?: (newGym: GymLocation) => void;
 }
 
@@ -31,7 +31,8 @@ export const GymPreWorkoutModal: React.FC<GymPreWorkoutModalProps> = ({
   const currentGym = gyms.find((g) => g.id === selectedGymId) || gyms[0];
 
   // Calculate compatibility & substitutions
-  const getSubstitutedSession = (gym: GymLocation): { session: PlannedWorkoutSession; replacedCount: number } => {
+  const getSubstitutedSession = (gym: GymLocation): { session?: PlannedWorkoutSession; replacedCount: number } => {
+    if (!session) return { session: undefined, replacedCount: 0 };
     let replaced = 0;
     const adaptedExercises = session.exercises.map((planned) => {
       const exerciseDef = EXERCISES_DATABASE.find((e) => e.id === planned.exerciseId);
@@ -189,27 +190,28 @@ export const GymPreWorkoutModal: React.FC<GymPreWorkoutModalProps> = ({
               Ajouter une nouvelle salle
             </button>
 
-            {/* Session Preview */}
-            <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800/80 mb-5 text-xs">
-              <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block mb-1">
-                Séance prévue : {session.title}
-              </span>
-              <p className="text-zinc-300 font-medium">
-                {adaptedSession.exercises.length} exercices prévus • Durée estimée : {session.estimatedDurationMinutes} min
-              </p>
-              {replacedCount > 0 && (
-                <p className="text-emerald-400 mt-1">
-                  Les exercices ont été automatiquement mis à jour pour correspondre aux équipements de votre salle.
+            {session && adaptedSession && (
+              <div className="p-3 bg-zinc-900/60 rounded-xl border border-zinc-800/80 mb-5 text-xs">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block mb-1">
+                  Séance prévue : {session.title}
+                </span>
+                <p className="text-zinc-300 font-medium">
+                  {adaptedSession.exercises.length} exercices prévus • Durée estimée : {session.estimatedDurationMinutes} min
                 </p>
-              )}
-            </div>
+                {replacedCount > 0 && (
+                  <p className="text-emerald-400 mt-1">
+                    Les exercices ont été automatiquement mis à jour pour correspondre aux équipements de votre salle.
+                  </p>
+                )}
+              </div>
+            )}
 
             <button
               onClick={handleStart}
               className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-zinc-950 font-semibold text-sm rounded-xl transition shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2"
             >
               <Dumbbell className="w-4 h-4" />
-              Lancer la séance ({currentGym.name})
+              {session ? `Lancer la séance (${currentGym.name})` : `Sélectionner (${currentGym.name})`}
             </button>
           </>
         ) : (

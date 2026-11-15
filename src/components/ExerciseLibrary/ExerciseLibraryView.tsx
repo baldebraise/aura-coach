@@ -1,15 +1,50 @@
 import React, { useState } from 'react';
-import { Exercise, MuscleGroup, EquipmentType } from '../../types';
+import { Exercise, MuscleGroup, EquipmentType, UserProfile } from '../../types';
 import { EXERCISES_DATABASE } from '../../data/exercises';
 import { EQUIPMENT_LABELS } from '../../data/defaultGyms';
 import { AnatomyDiagram } from './AnatomyDiagram';
-import { Search, Filter, Dumbbell, ShieldCheck, AlertOctagon, Wind, X } from 'lucide-react';
+import { 
+  Search, 
+  Filter, 
+  Dumbbell, 
+  ShieldCheck, 
+  AlertOctagon, 
+  Wind, 
+  X, 
+  Lock, 
+  ChevronDown, 
+  ChevronUp, 
+  ArrowLeft 
+} from 'lucide-react';
 
-export const ExerciseLibraryView: React.FC = () => {
+interface ExerciseLibraryViewProps {
+  profile?: UserProfile;
+  onBack?: () => void;
+  onOpenTest?: (testId: string) => void;
+}
+
+export const ExerciseLibraryView: React.FC<ExerciseLibraryViewProps> = ({
+  profile,
+  onBack,
+  onOpenTest
+}) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedMuscle, setSelectedMuscle] = useState<string>('all');
   const [selectedEquipment, setSelectedEquipment] = useState<string>('all');
   const [activeExerciseModal, setActiveExerciseModal] = useState<Exercise | null>(null);
+  const [showLockedAccordion, setShowLockedAccordion] = useState<boolean>(false);
+
+  const availableEquipment: EquipmentType[] = profile?.gyms?.[0]?.equipment || [
+    'bodyweight',
+    'dumbbells',
+    'barbell',
+    'pullup_bar',
+    'bench'
+  ];
+
+  const completedTestIds = (profile?.baselineTests || [])
+    .filter((t) => t.value !== undefined)
+    .map((t) => t.id);
 
   const muscleFilters: { id: string; label: string }[] = [
     { id: 'all', label: 'Tous les muscles' },
@@ -23,6 +58,49 @@ export const ExerciseLibraryView: React.FC = () => {
     { id: 'triceps', label: 'Triceps' },
     { id: 'abs', label: 'Abdominaux' }
   ];
+
+  // Check if an exercise is locked by equipment or required test
+  const getExerciseLockReason = (ex: Exercise): { isLocked: boolean; reason?: string; missingTestId?: string } => {
+    // 1. Equipment check
+    const missingEquip = ex.requiredEquipment.filter((eq) => !availableEquipment.includes(eq));
+    if (missingEquip.length > 0) {
+      return {
+        isLocked: true,
+        reason: `Matériel requis : ${missingEquip.map((e) => EQUIPMENT_LABELS[e] || e).join(', ')}`
+      };
+    }
+
+    // 2. Baseline Test calibration check for intensive exercises
+    const isUpperIntensive = ex.primaryMuscles.some((m) => ['chest', 'triceps', 'shoulders', 'back'].includes(m));
+    const isLowerIntensive = ex.primaryMuscles.some((m) => ['quadriceps', 'hamstrings', 'glutes'].includes(m));
+    const isCoreIntensive = ex.primaryMuscles.includes('abs');
+
+    if (isUpperIntensive && !completedTestIds.includes('test-upper') && ex.requiredEquipment.some((e) => ['barbell', 'cable_machine'].includes(e))) {
+      return {
+        isLocked: true,
+        reason: 'Test Force Haut requis',
+        missingTestId: 'test-upper'
+      };
+    }
+
+    if (isLowerIntensive && !completedTestIds.includes('test-lower') && ex.requiredEquipment.some((e) => ['barbell', 'leg_press'].includes(e))) {
+      return {
+        isLocked: true,
+        reason: 'Test Force Bas requis',
+        missingTestId: 'test-lower'
+      };
+    }
+
+    if (isCoreIntensive && !completedTestIds.includes('test-core') && ex.category === 'strength') {
+      return {
+        isLocked: true,
+        reason: 'Test Gainage requis',
+        missingTestId: 'test-core'
+      };
+    }
+
+    return { isLocked: false };
+  };
 
   const filteredExercises = EXERCISES_DATABASE.filter((ex) => {
     const matchesSearch =
@@ -41,14 +119,30 @@ export const ExerciseLibraryView: React.FC = () => {
     return matchesSearch && matchesMuscle && matchesEquipment;
   });
 
+  const unlockedExercises = filteredExercises.filter((ex) => !getExerciseLockReason(ex).isLocked);
+  const lockedExercises = filteredExercises.filter((ex) => getExerciseLockReason(ex).isLocked);
+
   return (
     <div className="space-y-4 pb-20 animate-in fade-in duration-200">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-zinc-100">Bibliothèque d'Exercices</h1>
-        <p className="text-xs text-zinc-500">
-          Biomécanique, schémas anatomiques vectoriels et consignes d'exécution
-        </p>
+      {/* Header with Back Button */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition"
+              title="Page précédente"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          <div>
+            <h1 className="text-xl font-bold text-zinc-100">Bibliothèque d'Exercices</h1>
+            <p className="text-xs text-zinc-500">
+              Biomécanique, schémas vectoriels et critères de déblocage
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Search Input */}
@@ -96,13 +190,13 @@ export const ExerciseLibraryView: React.FC = () => {
           ))}
         </select>
         <span className="text-xs text-zinc-500 font-mono ml-auto">
-          {filteredExercises.length} exercice{filteredExercises.length > 1 ? 's' : ''}
+          {unlockedExercises.length} accessible{unlockedExercises.length > 1 ? 's' : ''}
         </span>
       </div>
 
-      {/* Exercises Grid */}
+      {/* Unlocked Exercises Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {filteredExercises.map((exercise) => (
+        {unlockedExercises.map((exercise) => (
           <div
             key={exercise.id}
             onClick={() => setActiveExerciseModal(exercise)}
@@ -135,6 +229,65 @@ export const ExerciseLibraryView: React.FC = () => {
         ))}
       </div>
 
+      {/* Collapsible Locked Exercises Section */}
+      {lockedExercises.length > 0 && (
+        <div className="mt-6 pt-4 border-t border-zinc-800/80">
+          <button
+            onClick={() => setShowLockedAccordion(!showLockedAccordion)}
+            className="w-full flex items-center justify-between p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl hover:bg-zinc-900/50 transition text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-semibold text-zinc-300">
+                Exercices à débloquer ({lockedExercises.length})
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-zinc-500 text-xs">
+              <span>{showLockedAccordion ? 'Masquer' : 'Afficher'}</span>
+              {showLockedAccordion ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </div>
+          </button>
+
+          {showLockedAccordion && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 animate-in fade-in duration-200">
+              {lockedExercises.map((exercise) => {
+                const lockInfo = getExerciseLockReason(exercise);
+
+                return (
+                  <div
+                    key={exercise.id}
+                    onClick={() => setActiveExerciseModal(exercise)}
+                    className="p-3.5 bg-zinc-950/40 border border-zinc-800/40 opacity-75 hover:opacity-100 rounded-2xl cursor-pointer transition flex items-center justify-between gap-3 group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <AnatomyDiagram
+                        primaryMuscles={exercise.primaryMuscles}
+                        secondaryMuscles={exercise.secondaryMuscles}
+                        size="sm"
+                        className="shrink-0 p-1 bg-transparent border-0 opacity-60"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                          <h3 className="text-sm font-semibold text-zinc-300 truncate">
+                            {exercise.name}
+                          </h3>
+                        </div>
+                        <div className="mt-1">
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/40 border border-amber-900/50 text-amber-300">
+                            {lockInfo.reason}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Detailed Exercise Modal */}
       {activeExerciseModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
@@ -150,92 +303,95 @@ export const ExerciseLibraryView: React.FC = () => {
               </div>
               <button
                 onClick={() => setActiveExerciseModal(null)}
-                className="p-1 text-zinc-500 hover:text-zinc-300 rounded-lg"
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Anatomical Diagram Centered */}
-            <div className="mb-4">
+            <div className="flex justify-center my-4 bg-zinc-900/50 rounded-xl p-4 border border-zinc-800/80">
               <AnatomyDiagram
                 primaryMuscles={activeExerciseModal.primaryMuscles}
                 secondaryMuscles={activeExerciseModal.secondaryMuscles}
                 size="md"
-                className="mx-auto"
               />
-              <div className="flex justify-center gap-4 mt-2 text-[10px] font-mono text-zinc-400">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  Moteur principal
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-cyan-500" />
-                  Synergiste / Stabilisateur
-                </span>
-              </div>
             </div>
 
-            {/* Execution Sections */}
+            {/* Lock check inside modal */}
+            {(() => {
+              const lockInfo = getExerciseLockReason(activeExerciseModal);
+              if (lockInfo.isLocked) {
+                return (
+                  <div className="mb-4 p-3 bg-amber-950/30 border border-amber-800/60 rounded-xl flex items-center justify-between text-xs text-amber-300">
+                    <div className="flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>{lockInfo.reason}</span>
+                    </div>
+                    {lockInfo.missingTestId && onOpenTest && (
+                      <button
+                        onClick={() => {
+                          const testId = lockInfo.missingTestId!;
+                          setActiveExerciseModal(null);
+                          onOpenTest(testId);
+                        }}
+                        className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[10px] font-mono rounded-lg transition"
+                      >
+                        Tester
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             <div className="space-y-3.5 text-xs">
-              {/* Setup */}
-              <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl">
-                <div className="flex items-center gap-1.5 text-zinc-200 font-semibold mb-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>1. Position de départ & Alignement</span>
-                </div>
-                <ul className="list-disc pl-4 space-y-1 text-zinc-400">
-                  {activeExerciseModal.setupCues.map((cue, idx) => (
-                    <li key={idx}>{cue}</li>
+              <div>
+                <span className="font-mono text-[10px] uppercase text-zinc-400 font-semibold block mb-1">
+                  Mise en place (Setup)
+                </span>
+                <ul className="space-y-1 list-disc list-inside text-zinc-300">
+                  {activeExerciseModal.setupCues.map((c, i) => (
+                    <li key={i}>{c}</li>
                   ))}
                 </ul>
               </div>
 
-              {/* Execution */}
-              <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl">
-                <div className="flex items-center gap-1.5 text-zinc-200 font-semibold mb-1">
-                  <Dumbbell className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>2. Trajectoire & Mouvement</span>
-                </div>
-                <ul className="list-disc pl-4 space-y-1 text-zinc-400">
-                  {activeExerciseModal.executionCues.map((cue, idx) => (
-                    <li key={idx}>{cue}</li>
+              <div>
+                <span className="font-mono text-[10px] uppercase text-zinc-400 font-semibold block mb-1">
+                  Exécution
+                </span>
+                <ul className="space-y-1 list-disc list-inside text-zinc-300">
+                  {activeExerciseModal.executionCues.map((c, i) => (
+                    <li key={i}>{c}</li>
                   ))}
                 </ul>
               </div>
 
-              {/* Breathing */}
-              {activeExerciseModal.breathingCues && (
-                <div className="p-3 bg-zinc-900/60 border border-zinc-800 rounded-xl">
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-semibold mb-1">
-                    <Wind className="w-3.5 h-3.5" />
-                    <span>3. Respiration optimale</span>
-                  </div>
-                  <p className="text-zinc-400">{activeExerciseModal.breathingCues}</p>
-                </div>
-              )}
+              <div>
+                <span className="font-mono text-[10px] uppercase text-zinc-400 font-semibold block mb-1">
+                  Respiration
+                </span>
+                <p className="text-zinc-300 italic">{activeExerciseModal.breathingCues}</p>
+              </div>
 
-              {/* Mistakes to avoid */}
-              {activeExerciseModal.commonMistakes.length > 0 && (
-                <div className="p-3 bg-amber-950/20 border border-amber-900/40 rounded-xl">
-                  <div className="flex items-center gap-1.5 text-amber-400 font-semibold mb-1">
-                    <AlertOctagon className="w-3.5 h-3.5" />
-                    <span>Erreurs à proscrire</span>
-                  </div>
-                  <ul className="list-disc pl-4 space-y-1 text-amber-300/80">
-                    {activeExerciseModal.commonMistakes.map((err, idx) => (
-                      <li key={idx}>{err}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <div>
+                <span className="font-mono text-[10px] uppercase text-rose-400 font-semibold block mb-1">
+                  Erreurs à éviter
+                </span>
+                <ul className="space-y-1 list-disc list-inside text-rose-300/80">
+                  {activeExerciseModal.commonMistakes.map((c, i) => (
+                    <li key={i}>{c}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
 
             <button
               onClick={() => setActiveExerciseModal(null)}
-              className="w-full mt-5 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl transition"
+              className="w-full mt-6 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 font-medium text-xs rounded-xl transition border border-zinc-800"
             >
-              Fermer la fiche
+              Fermer
             </button>
           </div>
         </div>

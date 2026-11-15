@@ -6,7 +6,8 @@ import {
   CompletedWorkoutLog, 
   DailyHabits,
   GymLocation,
-  GoogleAuthUser
+  GoogleAuthUser,
+  PhysicalTestMetric
 } from './types';
 import { DEFAULT_GYMS } from './data/defaultGyms';
 import { generateDefaultSchedule } from './services/gemini';
@@ -23,8 +24,9 @@ import { GymPreWorkoutModal } from './components/LiveWorkoutPlayer/GymPreWorkout
 import { LiveWorkoutModal } from './components/LiveWorkoutPlayer/LiveWorkoutModal';
 import { AccountModal } from './components/Account/AccountModal';
 import { FirebaseConfigModal } from './components/Account/FirebaseConfigModal';
+import { GuidedTestModal, TestDefinitionId, TEST_DEFINITIONS } from './components/Dashboard/GuidedTestModal';
 import { ErrorAlertBanner, AppError } from './components/Common/ErrorAlertBanner';
-import { X, Check } from 'lucide-react';
+import { X, Check, ArrowLeft, Home } from 'lucide-react';
 
 export class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
   constructor(props: any) {
@@ -66,8 +68,9 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
 }
 
 export const App: React.FC = () => {
-  // Navigation State
+  // Navigation State with history
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const [tabHistory, setTabHistory] = useState<ActiveTab[]>([]);
 
   // Screen state when not fully onboarded: 'welcome' | 'onboarding'
   const [authScreen, setAuthScreen] = useState<'welcome' | 'onboarding'>('welcome');
@@ -85,6 +88,8 @@ export const App: React.FC = () => {
   // Modals State
   const [isAccountModalOpen, setIsAccountModalOpen] = useState<boolean>(false);
   const [isFirebaseConfigOpen, setIsFirebaseConfigOpen] = useState<boolean>(false);
+  const [activeTestModal, setActiveTestModal] = useState<TestDefinitionId | null>(null);
+  const [isGymModalDirectOpen, setIsGymModalDirectOpen] = useState<boolean>(false);
 
   // User Profile
   const [profile, setProfile] = useState<UserProfile | null>(() => {
@@ -308,12 +313,14 @@ export const App: React.FC = () => {
   };
 
   // Launch Session Process: 2) Start Live Player with chosen gym
-  const handleConfirmStartWithGym = (selectedGym: GymLocation, adaptedSession: PlannedWorkoutSession) => {
+  const handleConfirmStartWithGym = (selectedGym: GymLocation, adaptedSession?: PlannedWorkoutSession) => {
     setPendingSessionToStart(null);
-    setActiveWorkoutSession({
-      session: adaptedSession,
-      gym: selectedGym
-    });
+    if (adaptedSession) {
+      setActiveWorkoutSession({
+        session: adaptedSession,
+        gym: selectedGym
+      });
+    }
   };
 
   // Live Session finished
@@ -360,6 +367,92 @@ export const App: React.FC = () => {
         })
       );
     }
+  };
+
+  // Navigation Handlers with Back/Home history
+  const navigateToTab = (newTab: ActiveTab) => {
+    if (newTab !== activeTab) {
+      setTabHistory((prev) => [...prev, activeTab]);
+      setActiveTab(newTab);
+    }
+  };
+
+  const handleGoBack = () => {
+    if (activeTestModal) {
+      setActiveTestModal(null);
+      return;
+    }
+    if (authScreen === 'onboarding') {
+      setAuthScreen('welcome');
+      return;
+    }
+    if (tabHistory.length > 0) {
+      const prev = tabHistory[tabHistory.length - 1];
+      setTabHistory((old) => old.slice(0, -1));
+      setActiveTab(prev);
+    } else if (activeTab !== 'dashboard') {
+      setActiveTab('dashboard');
+    }
+  };
+
+  const handleGoHome = () => {
+    if (authScreen === 'onboarding') {
+      setAuthScreen('welcome');
+    }
+    setActiveTab('dashboard');
+    setTabHistory([]);
+  };
+
+  const canGoBack = (authScreen === 'onboarding') || (activeTab !== 'dashboard') || (tabHistory.length > 0);
+
+  // Save Baseline Physical Test result and immediately unlock corresponding categories
+  const handleSaveTestResult = (
+    testId: TestDefinitionId,
+    score: number,
+    levelName: string
+  ) => {
+    const currentProfile = profile || activeOrGuestProfile;
+    const existingTests = currentProfile.baselineTests || [];
+    const otherTests = existingTests.filter((t) => t.id !== testId);
+    const testDef = TEST_DEFINITIONS[testId] || TEST_DEFINITIONS['test-upper'];
+
+    const updatedTests: PhysicalTestMetric[] = [
+      ...otherTests,
+      {
+        id: testId,
+        name: testDef.title,
+        category: (testDef.category === 'cardio' ? 'cardio' : 'strength') as any,
+        unit: testDef.unit,
+        value: score,
+        date: new Date().toISOString(),
+        instructions: levelName
+      }
+    ];
+
+    const updatedProfile: UserProfile = {
+      ...currentProfile,
+      baselineTests: updatedTests
+    };
+
+    setProfile(updatedProfile);
+    try {
+      localStorage.setItem('aura_profile', JSON.stringify(updatedProfile));
+    } catch {
+      // Ignored
+    }
+
+    try {
+      sounds.playRecordBeaten();
+    } catch {
+      // Audio optional
+    }
+
+    setAuthSuccessToast({
+      message: `Test validé : ${score} ${testDef.unit} (${levelName}) ! Séances correspondantes débloquées.`,
+      photoURL: currentProfile.googleUser?.photoURL,
+      displayName: currentProfile.name
+    });
+    setActiveTestModal(null);
   };
 
   const activeOrGuestProfile: UserProfile = profile || {
@@ -432,15 +525,46 @@ export const App: React.FC = () => {
       )}
 
       {/* Main Top Nav Bar - ALWAYS DISPLAYED */}
-      <header className="sticky top-0 z-30 bg-zinc-950/90 border-b border-zinc-800/80 backdrop-blur-md px-4 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-zinc-950/90 border-b border-zinc-800/80 backdrop-blur-md px-4 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-emerald-500 text-zinc-950 font-black font-mono flex items-center justify-center text-xs tracking-tighter">
-            A
-          </div>
-          <span className="font-bold tracking-tight text-sm text-zinc-100">
-            AURA
-          </span>
-          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 ml-1">
+          {/* Back Button (Page précédente) */}
+          {canGoBack && (
+            <button
+              onClick={handleGoBack}
+              className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-zinc-100 hover:border-zinc-700 transition flex items-center gap-1 text-xs"
+              title="Page précédente"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span className="text-[11px] font-mono hidden sm:inline">Retour</span>
+            </button>
+          )}
+
+          {/* Logo & Brand (Clicking returns Home / Dashboard) */}
+          <button
+            onClick={handleGoHome}
+            className="flex items-center gap-2 group text-left"
+            title="Retour à l'accueil"
+          >
+            <div className="w-7 h-7 rounded-lg bg-emerald-500 text-zinc-950 font-black font-mono flex items-center justify-center text-xs tracking-tighter group-hover:bg-emerald-400 transition">
+              A
+            </div>
+            <span className="font-bold tracking-tight text-sm text-zinc-100 group-hover:text-emerald-300 transition">
+              AURA
+            </span>
+          </button>
+
+          {/* Home Icon button (Direct return to Home) */}
+          {activeTab !== 'dashboard' && profile?.onboardingCompleted && (
+            <button
+              onClick={handleGoHome}
+              className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-emerald-400 hover:border-emerald-800 transition"
+              title="Retour à l'accueil"
+            >
+              <Home className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-500">
             v1.0
           </span>
         </div>
@@ -519,17 +643,28 @@ export const App: React.FC = () => {
             dailyHabits={dailyHabits}
             onUpdateHabits={setDailyHabits}
             onStartSession={(s) => handleRequestStartSession(s)}
-            onOpenAICoach={() => setActiveTab('ai')}
+            onOpenAICoach={() => navigateToTab('ai')}
+            onOpenGuidedTest={(testId) => setActiveTestModal(testId)}
+            onOpenGymConfig={() => setIsGymModalDirectOpen(true)}
           />
         )}
 
         {activeTab === 'workout' && (
           <div className="space-y-4 pb-20">
-            <div>
-              <h1 className="text-xl font-bold text-zinc-100">Séances & Programmation</h1>
-              <p className="text-xs text-zinc-500">
-                Planning hebdomadaire calibré sur votre objectif ({(profile || activeOrGuestProfile).primaryGoal})
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-xl font-bold text-zinc-100">Séances & Programmation</h1>
+                <p className="text-xs text-zinc-500">
+                  Planning hebdomadaire calibré sur votre objectif ({(profile || activeOrGuestProfile).primaryGoal})
+                </p>
+              </div>
+              <button
+                onClick={handleGoHome}
+                className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition text-xs flex items-center gap-1 font-mono"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Accueil</span>
+              </button>
             </div>
 
             <div className="space-y-3">
@@ -566,7 +701,13 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'library' && <ExerciseLibraryView />}
+        {activeTab === 'library' && (
+          <ExerciseLibraryView
+            profile={profile || activeOrGuestProfile}
+            onBack={handleGoBack}
+            onOpenTest={(testId) => setActiveTestModal(testId as TestDefinitionId)}
+          />
+        )}
 
         {activeTab === 'ai' && (
           <AICoachView
@@ -622,6 +763,35 @@ export const App: React.FC = () => {
         }}
       />
 
+      {/* Guided Athletic Test Studio Modal */}
+      {activeTestModal && (
+        <GuidedTestModal
+          testId={activeTestModal}
+          profile={profile || activeOrGuestProfile}
+          isOpen={true}
+          onClose={() => setActiveTestModal(null)}
+          onSaveTestResult={handleSaveTestResult}
+        />
+      )}
+
+      {/* Direct Gym Configuration Modal */}
+      {isGymModalDirectOpen && (
+        <GymPreWorkoutModal
+          gyms={profile?.gyms || DEFAULT_GYMS}
+          isOpen={true}
+          onClose={() => setIsGymModalDirectOpen(false)}
+          onConfirmStart={() => setIsGymModalDirectOpen(false)}
+          onAddNewGym={(newGym) => {
+            if (profile) {
+              setProfile({
+                ...profile,
+                gyms: [...profile.gyms, newGym]
+              });
+            }
+          }}
+        />
+      )}
+
       {/* Pre-Workout Gym Selector Modal */}
       {pendingSessionToStart && (
         <GymPreWorkoutModal
@@ -656,7 +826,7 @@ export const App: React.FC = () => {
       {profile?.onboardingCompleted && (
         <Navigation
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={navigateToTab}
           isWorkoutActive={!!activeWorkoutSession}
         />
       )}
