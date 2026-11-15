@@ -147,6 +147,25 @@ export interface CompletedWorkoutLog {
   notes?: string;
 }
 
+export interface MacroTarget {
+  calories: number;
+  proteinGrams: number;
+  carbsGrams: number;
+  fatGrams: number;
+  waterLiters: number;
+  isWorkoutDay: boolean;
+  bmr: number;
+  tdee: number;
+  goalDeltaCalories: number;
+}
+
+export interface NutritionMealsState {
+  breakfast: boolean;
+  lunch: boolean;
+  snackOrPeri: boolean;
+  dinner: boolean;
+}
+
 export interface DailyHabits {
   date: string; // YYYY-MM-DD
   weightKg?: number;
@@ -156,6 +175,8 @@ export interface DailyHabits {
   proteinAdequate: boolean;
   wholeFoodsAdequate: boolean;
   stretchingDone: boolean;
+  proteinGramsConsumed?: number;
+  mealsCompleted?: NutritionMealsState;
 }
 
 export interface AIChatMessage {

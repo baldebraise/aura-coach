@@ -3,6 +3,8 @@ import { UserProfile, WeeklyScheduleItem, CompletedWorkoutLog, DailyHabits, Plan
 import { CalibrationBanner } from './CalibrationBanner';
 import { AssessmentBanner } from './AssessmentBanner';
 import { TestDefinitionId, TEST_DEFINITIONS } from './GuidedTestModal';
+import { DashboardNutritionWidget } from '../Nutrition/DashboardNutritionWidget';
+import { NutritionDetailedModal } from '../Nutrition/NutritionDetailedModal';
 import { 
   Dumbbell, 
   Calendar, 
@@ -116,6 +118,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAgenticAssessment
 }) => {
   const [notificationGranted, setNotificationGranted] = useState<boolean>(false);
+  const [isDetailedNutritionOpen, setIsDetailedNutritionOpen] = useState<boolean>(false);
 
   // Today's day of week (0 = Sunday, 1 = Monday, etc.)
   const todayDayOfWeek = new Date().getDay();
@@ -127,6 +130,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         isRestDay: true,
         session: undefined
       };
+
+  const isTodayWorkoutDay = !todayScheduleItem.isRestDay && !!todayScheduleItem.session;
 
   const userWeight = profile?.weightKg;
 
@@ -326,102 +331,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         )}
       </div>
 
-      {/* DAILY HABITS TRACKER */}
-      <div className="p-4 bg-zinc-900/40 border border-zinc-800/80 rounded-2xl">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-zinc-100">Habitudes & Nutrition du Jour</h3>
-          <span className="text-[10px] font-mono text-zinc-500 uppercase">Non restrictif</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2.5">
-          {/* Water */}
-          <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Droplet className="w-4 h-4 text-cyan-400" />
-              <div>
-                <span className="text-[10px] text-zinc-500 uppercase font-mono block">Eau</span>
-                <span className="text-xs font-mono font-bold text-zinc-200">
-                  {dailyHabits.waterLiters}L / {dailyHabits.targetWaterLiters}L
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={() =>
-                onUpdateHabits({
-                  ...dailyHabits,
-                  waterLiters: Math.min(4, dailyHabits.waterLiters + 0.5)
-                })
-              }
-              className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 text-cyan-400 rounded-lg text-xs font-mono"
-            >
-              +0.5L
-            </button>
-          </div>
-
-          {/* Sleep */}
-          <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Moon className="w-4 h-4 text-indigo-400" />
-              <div>
-                <span className="text-[10px] text-zinc-500 uppercase font-mono block">Sommeil</span>
-                <span className="text-xs font-mono font-bold text-zinc-200">
-                  {dailyHabits.sleepHours || 7.5}h
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Protein check */}
-          <div
-            onClick={() =>
-              onUpdateHabits({
-                ...dailyHabits,
-                proteinAdequate: !dailyHabits.proteinAdequate
-              })
-            }
-            className={`p-3 rounded-xl border transition cursor-pointer flex items-center justify-between ${
-              dailyHabits.proteinAdequate
-                ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
-                : 'bg-zinc-950/80 border-zinc-800/80 text-zinc-400'
-            }`}
-          >
-            <div>
-              <span className="text-[10px] uppercase font-mono block">Protéines</span>
-              <span className="text-xs font-medium">À chaque repas</span>
-            </div>
-            {dailyHabits.proteinAdequate ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            ) : (
-              <div className="w-4 h-4 rounded-full border border-zinc-700" />
-            )}
-          </div>
-
-          {/* Whole foods check */}
-          <div
-            onClick={() =>
-              onUpdateHabits({
-                ...dailyHabits,
-                wholeFoodsAdequate: !dailyHabits.wholeFoodsAdequate
-              })
-            }
-            className={`p-3 rounded-xl border transition cursor-pointer flex items-center justify-between ${
-              dailyHabits.wholeFoodsAdequate
-                ? 'bg-emerald-950/40 border-emerald-800/80 text-emerald-300'
-                : 'bg-zinc-950/80 border-zinc-800/80 text-zinc-400'
-            }`}
-          >
-            <div>
-              <span className="text-[10px] uppercase font-mono block">Végétaux</span>
-              <span className="text-xs font-medium">Légumes & fibres</span>
-            </div>
-            {dailyHabits.wholeFoodsAdequate ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            ) : (
-              <div className="w-4 h-4 rounded-full border border-zinc-700" />
-            )}
-          </div>
-        </div>
-      </div>
+      {/* NUTRITION & ATHLETIC ENERGY HUB */}
+      <DashboardNutritionWidget
+        profile={profile}
+        dailyHabits={dailyHabits}
+        onUpdateHabits={onUpdateHabits}
+        isWorkoutDay={isTodayWorkoutDay}
+        todaySession={todayScheduleItem.session}
+        onOpenDetailedNutrition={() => setIsDetailedNutritionOpen(true)}
+      />
 
       {/* WEEKLY SCHEDULE CALENDAR WITH CALIBRATION STATUS */}
       <div className="p-4 bg-zinc-900/40 border border-zinc-800/80 rounded-2xl">
@@ -597,6 +515,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
       )}
+
+      {/* Detailed Nutrition & Assistant Modal */}
+      <NutritionDetailedModal
+        isOpen={isDetailedNutritionOpen}
+        onClose={() => setIsDetailedNutritionOpen(false)}
+        profile={profile}
+        dailyHabits={dailyHabits}
+        onUpdateHabits={onUpdateHabits}
+        isWorkoutDay={isTodayWorkoutDay}
+        sessionTitle={todayScheduleItem.session?.title}
+      />
     </div>
   );
 };
