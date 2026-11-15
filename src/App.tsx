@@ -10,6 +10,8 @@ import {
 } from './types';
 import { DEFAULT_GYMS } from './data/defaultGyms';
 import { generateDefaultSchedule } from './services/gemini';
+import { subscribeToAuthChanges } from './services/firebase';
+import { sounds } from './utils/audio';
 import { Navigation, ActiveTab } from './components/Navigation';
 import { WelcomeScreen } from './components/Welcome/WelcomeScreen';
 import { DashboardView } from './components/Dashboard/DashboardView';
@@ -22,6 +24,7 @@ import { LiveWorkoutModal } from './components/LiveWorkoutPlayer/LiveWorkoutModa
 import { AccountModal } from './components/Account/AccountModal';
 import { FirebaseConfigModal } from './components/Account/FirebaseConfigModal';
 import { ErrorAlertBanner, AppError } from './components/Common/ErrorAlertBanner';
+import { X, Check } from 'lucide-react';
 
 export const App: React.FC = () => {
   // Navigation State
@@ -32,6 +35,13 @@ export const App: React.FC = () => {
 
   // Global Error Banner State
   const [currentError, setCurrentError] = useState<AppError | null>(null);
+
+  // Auth Success Notification Toast
+  const [authSuccessToast, setAuthSuccessToast] = useState<{
+    message: string;
+    photoURL?: string | null;
+    displayName?: string | null;
+  } | null>(null);
 
   // Modals State
   const [isAccountModalOpen, setIsAccountModalOpen] = useState<boolean>(false);
@@ -128,41 +138,86 @@ export const App: React.FC = () => {
     localStorage.setItem('aura_daily_habits', JSON.stringify(dailyHabits));
   }, [dailyHabits]);
 
+  // Subscribe to Firebase Auth State changes (persists login across refreshes)
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthChanges((firebaseUser) => {
+      if (firebaseUser) {
+        const googleUser: GoogleAuthUser = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL
+        };
+        setProfile((prev) => {
+          if (!prev) {
+            const initial: UserProfile = {
+              id: googleUser.uid,
+              name: googleUser.displayName || 'Athlète',
+              age: 28,
+              gender: 'male',
+              heightCm: 178,
+              weightKg: 75,
+              injuries: [],
+              activityLevel: 'moderate',
+              weeklyAvailabilityDays: 3,
+              preferredSessionDurationMinutes: 60,
+              primaryGoal: 'recomposition',
+              secondaryGoals: [],
+              baselineTests: [],
+              gyms: DEFAULT_GYMS,
+              isGoogleAuthenticated: true,
+              googleUser,
+              onboardingCompleted: true
+            };
+            return initial;
+          }
+          return {
+            ...prev,
+            isGoogleAuthenticated: true,
+            googleUser,
+            name: (!prev.name || prev.name === 'Athlète') ? (googleUser.displayName || prev.name) : prev.name
+          };
+        });
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Google Sign In Success Handler
   const handleGoogleSignInSuccess = (googleUser: GoogleAuthUser) => {
-    if (profile && profile.onboardingCompleted) {
-      // Existing profile: update with google user
-      setProfile({
-        ...profile,
-        name: googleUser.displayName || profile.name,
-        isGoogleAuthenticated: true,
-        googleUser
-      });
-      setActiveTab('dashboard');
-    } else {
-      // Create initial profile container with Google User data
-      const initialProfile: UserProfile = {
-        id: googleUser.uid,
-        name: googleUser.displayName || 'Athlète',
-        age: 28,
-        gender: 'male',
-        heightCm: 178,
-        weightKg: 75,
-        injuries: [],
-        activityLevel: 'moderate',
-        weeklyAvailabilityDays: 3,
-        preferredSessionDurationMinutes: 60,
-        primaryGoal: 'recomposition',
-        secondaryGoals: [],
-        baselineTests: [],
-        gyms: DEFAULT_GYMS,
-        isGoogleAuthenticated: true,
-        googleUser,
-        onboardingCompleted: false
-      };
-      setProfile(initialProfile);
-      setAuthScreen('onboarding');
+    sounds.playRecordBeaten();
+    const existing = profile;
+    const initialProfile: UserProfile = {
+      id: googleUser.uid,
+      name: googleUser.displayName || existing?.name || 'Athlète',
+      age: existing?.age || 28,
+      gender: existing?.gender || 'male',
+      heightCm: existing?.heightCm || 178,
+      weightKg: existing?.weightKg || 75,
+      injuries: existing?.injuries || [],
+      activityLevel: existing?.activityLevel || 'moderate',
+      weeklyAvailabilityDays: existing?.weeklyAvailabilityDays || 3,
+      preferredSessionDurationMinutes: existing?.preferredSessionDurationMinutes || 60,
+      primaryGoal: existing?.primaryGoal || 'recomposition',
+      secondaryGoals: existing?.secondaryGoals || [],
+      baselineTests: existing?.baselineTests || [],
+      gyms: existing?.gyms || DEFAULT_GYMS,
+      isGoogleAuthenticated: true,
+      googleUser,
+      onboardingCompleted: true
+    };
+    setProfile(initialProfile);
+    if (!schedule || schedule.length === 0) {
+      setSchedule(generateDefaultSchedule(initialProfile));
     }
+    setActiveTab('dashboard');
+    setAuthSuccessToast({
+      message: `Connecté avec Google : ${googleUser.displayName || googleUser.email}`,
+      photoURL: googleUser.photoURL,
+      displayName: googleUser.displayName
+    });
+    // Immediately open the Account modal so the user sees their photo, email, sync, and settings!
+    setIsAccountModalOpen(true);
   };
 
   // Handle Onboarding Completion
@@ -247,43 +302,26 @@ export const App: React.FC = () => {
     }
   };
 
-  // 1. If user has no completed profile yet
-  if (!profile || !profile.onboardingCompleted) {
-    if (authScreen === 'welcome') {
-      return (
-        <>
-          <ErrorAlertBanner
-            error={currentError}
-            onDismiss={() => setCurrentError(null)}
-          />
-          <WelcomeScreen
-            onStartOnboarding={() => setAuthScreen('onboarding')}
-            onGoogleSignInSuccess={handleGoogleSignInSuccess}
-            onError={(err) => setCurrentError({ id: 'err-' + Date.now(), ...err })}
-            onOpenFirebaseConfig={() => setIsFirebaseConfigOpen(true)}
-          />
-          <FirebaseConfigModal
-            isOpen={isFirebaseConfigOpen}
-            onClose={() => setIsFirebaseConfigOpen(false)}
-            onConfigSaved={() => {
-              setCurrentError(null);
-            }}
-          />
-        </>
-      );
-    }
-    return (
-      <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-center">
-        <ErrorAlertBanner
-          error={currentError}
-          onDismiss={() => setCurrentError(null)}
-        />
-        <OnboardingFlow onComplete={handleOnboardingComplete} />
-      </div>
-    );
-  }
+  const activeOrGuestProfile: UserProfile = profile || {
+    id: 'guest',
+    name: 'Athlète',
+    age: 28,
+    gender: 'male',
+    heightCm: 178,
+    weightKg: 75,
+    injuries: [],
+    activityLevel: 'moderate',
+    weeklyAvailabilityDays: 3,
+    preferredSessionDurationMinutes: 60,
+    primaryGoal: 'recomposition',
+    secondaryGoals: [],
+    baselineTests: [],
+    gyms: DEFAULT_GYMS,
+    isGoogleAuthenticated: false,
+    googleUser: null,
+    onboardingCompleted: false
+  };
 
-  // 2. Active Application Dashboard & Tabs
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
       {/* Explicit Global Error Banner */}
@@ -292,7 +330,48 @@ export const App: React.FC = () => {
         onDismiss={() => setCurrentError(null)}
       />
 
-      {/* Main Top Nav Bar */}
+      {/* Auth Success Notification Toast */}
+      {authSuccessToast && (
+        <div className="sticky top-2 z-50 mx-4 mb-2 p-3 bg-zinc-900 border border-emerald-500/60 rounded-xl shadow-xl flex items-center justify-between animate-in fade-in slide-in-from-top duration-300">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {authSuccessToast.photoURL ? (
+              <img
+                src={authSuccessToast.photoURL}
+                alt=""
+                className="w-7 h-7 rounded-full border border-emerald-500 shrink-0 object-cover"
+              />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-emerald-500 text-zinc-950 font-bold text-xs flex items-center justify-center shrink-0">
+                {authSuccessToast.displayName?.charAt(0) || 'G'}
+              </div>
+            )}
+            <div className="min-w-0">
+              <span className="text-xs font-semibold text-zinc-100 block truncate">
+                {authSuccessToast.message}
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono">
+                Compte Google actif & synchronisé
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setIsAccountModalOpen(true)}
+              className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-[11px] rounded-lg transition"
+            >
+              Gérer
+            </button>
+            <button
+              onClick={() => setAuthSuccessToast(null)}
+              className="p-1 text-zinc-400 hover:text-zinc-200"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Top Nav Bar - ALWAYS DISPLAYED */}
       <header className="sticky top-0 z-30 bg-zinc-950/90 border-b border-zinc-800/80 backdrop-blur-md px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-emerald-500 text-zinc-950 font-black font-mono flex items-center justify-center text-xs tracking-tighter">
@@ -307,37 +386,64 @@ export const App: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2.5">
-          {/* Quick Workout Button */}
-          <button
-            onClick={() => handleRequestStartSession()}
-            className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-lg transition shadow-sm"
-          >
-            Séance
-          </button>
+          {profile?.onboardingCompleted && (
+            <button
+              onClick={() => handleRequestStartSession()}
+              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-lg transition shadow-sm"
+            >
+              Séance
+            </button>
+          )}
 
           {/* User Photo Avatar / Account Menu Trigger */}
           <button
             onClick={() => setIsAccountModalOpen(true)}
-            className="w-8 h-8 rounded-full border-2 border-zinc-700 hover:border-emerald-500 overflow-hidden transition flex items-center justify-center bg-zinc-900"
+            className="w-8 h-8 rounded-full border-2 border-zinc-700 hover:border-emerald-500 overflow-hidden transition flex items-center justify-center bg-zinc-900 relative"
             title="Gérer mon compte"
           >
-            {profile.googleUser?.photoURL ? (
+            {activeOrGuestProfile.googleUser?.photoURL ? (
               <img
-                src={profile.googleUser.photoURL}
-                alt={profile.googleUser.displayName || 'Photo Google'}
+                src={activeOrGuestProfile.googleUser.photoURL}
+                alt={activeOrGuestProfile.googleUser.displayName || 'Photo Google'}
                 className="w-full h-full object-cover"
               />
             ) : (
               <span className="text-xs font-mono font-bold text-zinc-300">
-                {profile.name.charAt(0).toUpperCase()}
+                {activeOrGuestProfile.name.charAt(0).toUpperCase()}
               </span>
+            )}
+            {activeOrGuestProfile.isGoogleAuthenticated && (
+              <span className="absolute bottom-0 right-0 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-zinc-950" />
             )}
           </button>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-lg mx-auto w-full px-4 pt-4">
+      {/* Screen Body */}
+      {(!profile || !profile.onboardingCompleted) ? (
+        authScreen === 'welcome' ? (
+          <WelcomeScreen
+            onStartOnboarding={() => setAuthScreen('onboarding')}
+            onGoogleSignInSuccess={handleGoogleSignInSuccess}
+            onError={(err) => setCurrentError({ id: 'err-' + Date.now(), ...err })}
+            onOpenFirebaseConfig={() => setIsFirebaseConfigOpen(true)}
+            profile={profile}
+            onOpenAccountModal={() => setIsAccountModalOpen(true)}
+            onEnterApp={() => {
+              if (profile) {
+                setProfile({ ...profile, onboardingCompleted: true });
+                setActiveTab('dashboard');
+              }
+            }}
+          />
+        ) : (
+          <div className="flex-1 flex flex-col justify-center">
+            <OnboardingFlow onComplete={handleOnboardingComplete} />
+          </div>
+        )
+      ) : (
+        /* Main Application Tabs */
+        <main className="flex-1 max-w-lg mx-auto w-full px-4 pt-4">
         {activeTab === 'dashboard' && (
           <DashboardView
             profile={profile}
@@ -416,19 +522,23 @@ export const App: React.FC = () => {
           />
         )}
       </main>
+    )}
 
       {/* Account Management Modal */}
       <AccountModal
         isOpen={isAccountModalOpen}
         onClose={() => setIsAccountModalOpen(false)}
-        profile={profile}
+        profile={activeOrGuestProfile}
         onUpdateProfile={setProfile}
         onLogout={() => {
-          setProfile({
-            ...profile,
-            isGoogleAuthenticated: false,
-            googleUser: null
-          });
+          if (profile) {
+            setProfile({
+              ...profile,
+              isGoogleAuthenticated: false,
+              googleUser: null
+            });
+          }
+          setAuthSuccessToast(null);
         }}
         onShowFirebaseConfig={() => {
           setIsAccountModalOpen(false);
@@ -448,16 +558,18 @@ export const App: React.FC = () => {
       {/* Pre-Workout Gym Selector Modal */}
       {pendingSessionToStart && (
         <GymPreWorkoutModal
-          gyms={profile.gyms || DEFAULT_GYMS}
+          gyms={profile?.gyms || DEFAULT_GYMS}
           session={pendingSessionToStart}
           isOpen={true}
           onClose={() => setPendingSessionToStart(null)}
           onConfirmStart={handleConfirmStartWithGym}
           onAddNewGym={(newGym) => {
-            setProfile({
-              ...profile,
-              gyms: [...profile.gyms, newGym]
-            });
+            if (profile) {
+              setProfile({
+                ...profile,
+                gyms: [...profile.gyms, newGym]
+              });
+            }
           }}
         />
       )}
@@ -474,11 +586,13 @@ export const App: React.FC = () => {
       )}
 
       {/* Bottom Mobile Navigation */}
-      <Navigation
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        isWorkoutActive={!!activeWorkoutSession}
-      />
+      {profile?.onboardingCompleted && (
+        <Navigation
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          isWorkoutActive={!!activeWorkoutSession}
+        />
+      )}
     </div>
   );
 };
